@@ -44,7 +44,7 @@ daily_data <- Reduce(function(x, y) merge(x, y, all=TRUE, by = c('date', 'fund_c
 
 # Data Quality check
 ## Manual Correction 1:
-data_quality_hyp1(daily_data[['nav']])
+data_quality_hyp1(daily_data)
 
 daily_data <- daily_data %>%
   mutate(
@@ -72,39 +72,6 @@ daily_data <- daily_data %>%
     nav_return = append(NA, diff(nav)/nav[-length(nav)]), .after = 3
   ) %>% 
   dplyr::select(!nav)
-
-## Suspect Fund 1:
-### Fund 121959 after 2014-08-11
-#### Implication: None at this point
-
-## Suspect Fund 2:
-### NAV Fund 193781: 2.8396237 (2007-10-02), 2.809962 (2007-10-03), 38.2988350 (2007-10-04), 32.0555746 (2007-10-05)
-#### Implication: None at this point. However, we may set the return of 2007-10-04 to NA.
-
-## Suspect Fund 3:
-### NAV Fund 215546: 8815.449 (2018-12-24), 8815.259 (2018-12-26), 74526.266 (2018-12-27), 75382.981 (2018-12-28)
-#### Implication: None at this point. However, we may set the return of 2018-12-27 to NA.
-
-## Suspect Fund 4:
-### NAV Fund 256471: 0.8502615 (2008-09-01), 0.8214293 (2008-09-02), 6.3871004 (2008-09-03), 6.2648126 (2008-09-04)
-#### Implication: None at this point. However, we may set the return of 2008-09-03 to NA.
-
-## Suspect Fund 5:
-### NAV Fund 147745: 43.4288840 (2011-01-11), 42.2511760 (2011-01-12), 310.1308029 (2011-01-13), 310.4996738 (2011-01-14)
-#### Implication: None at this point. However, we may set the return of 2011-01-13 to NA.
-
-## Suspect Fund 6:
-### NAV Fund 009989: 42.95276 (1999-07-28), 41.46224 (1999-07-29), 233.29873 (1999-07-30), 233.37419 (1999-08-02)
-#### Implication: None at this point. However, we may set the return of 1999-07-30 to NA.
-
-## Suspect Fund 7:
-### NAV Fund 453080: 218.4119 (2021-03-01), 200.9097 (2021-03-02), 1094.1305 (2021-03-03), 1139.7599 (2021-03-04)
-#### Implication: None at this point. However, we may set the return of 2021-03-03 to NA.
-
-## REALLY Suspect Fund 8:
-### NAV Fund 263941: Fund starts with 1000 (2010-12-17) and stays that way until 2011-06-30
-### when it jumps to 4230.170, then stays that way until 2011-10-10 when it goes to 2829.301
-#### Implication: None at this point. However, we may set all returns before 2011-10-11 (not including) to NA.
 
 rm(daily_data_types, ten_remaining_funds, list_ten_remaining, i, ten_remaining)
 
