@@ -7,16 +7,6 @@
 ###########################################################################
 ###########################################################################
 
-fill_na_to_last <- function(x){
-  last_non_na <- max(which(!is.na(x)))
-  
-  x_filled <- na.locf(x[1:max(which(!is.na(x)))], na.rm = FALSE)
-  
-  x_filled <- append(x_filled, rep(NA, length(x) - last_non_na))
-  
-  return(x_filled)
-}
-
 clean_economatica_data <- function(dirty_db){ # Economatica is the data provider
   funds_code <- str_split_i(colnames(dirty_db)[-1], '\n', -1)
   

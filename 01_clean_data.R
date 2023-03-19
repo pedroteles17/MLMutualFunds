@@ -11,6 +11,14 @@ source('99_functions.R')
 ###########################################################################
 
 ##################################################################
+##                          NEFIN Data                          ##
+##################################################################
+
+nefin <- read_excel('clean_data/nefin.xlsx') %>% 
+  mutate(date = as.Date(date)) %>% 
+  arrange(date)
+
+##################################################################
 ##                          Daily Data                          ##
 ##################################################################
 
@@ -40,13 +48,11 @@ names(ten_remaining) <- daily_data_types
 daily_data <- Map(join_data, daily_data_types, ten_remaining)
 names(daily_data) <- daily_data_types
 
-daily_data <- Reduce(function(x, y) merge(x, y, all=TRUE, by = c('date', 'fund_code')), daily_data)
-
 # Data Quality check
 ## Manual Correction 1:
-data_quality_hyp1(daily_data)
+data_quality_hyp1(daily_data[['nav']])
 
-daily_data <- daily_data %>%
+daily_data[['nav']] <- daily_data[['nav']] %>% 
   mutate(
     nav = ifelse(nav == 0, NA, nav) # MC1
   ) %>% 
@@ -65,15 +71,26 @@ daily_data <- daily_data %>%
     nav = ifelse(date == '2008-06-20' & fund_code == '211966', NA, nav), # MC12
     nav = ifelse(date == '2007-01-03' & fund_code == '177210', NA, nav), # MC13
   ) %>% 
-  drop_na(nav) %>% 
+  drop_na(nav) 
+
+# Using the improved NAV data, we calculate the funds' returns.
+daily_data[['nav_return']] <- daily_data[['nav']] %>% 
   arrange(date) %>% 
+  right_join(select(nefin, date), by = 'date') %>% 
   group_by(fund_code) %>% 
   mutate(
     nav_return = append(NA, diff(nav)/nav[-length(nav)]), .after = 3
   ) %>% 
-  dplyr::select(!nav)
+  dplyr::select(!nav) %>% 
+  dplyr::filter(date <= '2021-12-31') %>% 
+  drop_na(nav_return)
+  
+daily_data <- Reduce(function(x, y) merge(x, y, all=TRUE, by = c('date', 'fund_code')), daily_data)
 
-rm(daily_data_types, ten_remaining_funds, list_ten_remaining, i, ten_remaining)
+rm(
+  daily_data_types, ten_remaining_funds, list_ten_remaining, i, 
+  ten_remaining, clean_economatica_data, join_data, data_quality_hyp1
+)
 
 #################################################################
 ##                      Registration Data                      ##
@@ -81,36 +98,63 @@ rm(daily_data_types, ten_remaining_funds, list_ten_remaining, i, ten_remaining)
 
 # Each fund receives a unique code. We use this to avoid false duplicates. 
 fund_code_active <- read_excel(
-  "raw_data/code_active.xlsx", na = "-", skip = 3
+  paste0(folder_path, "code_active.xlsx"), na = "-", skip = 3
 ) 
 
 fund_code_canceled <- read_excel(
-  "raw_data/code_canceled.xlsx", na = "-", skip = 3
+  paste0(folder_path, "code_canceled.xlsx"), na = "-", skip = 3
 ) 
 
 fund_code <- rbind(fund_code_active, fund_code_canceled) %>% 
   dplyr::select(-1) %>%
-  dplyr::select(c('CNPJ', 'Código')) %>% 
+  dplyr::select(c('CNPJ', 'Nome')) %>% 
   set_names(c('cnpj', 'code'))
 
 registration_data <- read_excel(
-  "raw_data/registration_data.xlsx", na = "-", skip = 3
+  paste0(folder_path, "registration_data.xlsx"), na = "-", skip = 3
 ) %>% 
-  dplyr::select(-c(1, 3))
+  dplyr::select(-c(1, 3)) %>% 
+  distinct()
 
 colnames(registration_data) <- c(
-  "nome", "pais_sede", "tipo_ativo", "ativo_cancelado", "cnpj",
-  "classific_anbima", "gestor_carteira", "empresa_gestora",
-  "administradora", "benchmark", "invest_qualificado", "alavancado",
-  "data_inicio", "data_fim", "prazo_emis_cota", "prazo_conv_resg",
-  "prazo_pag_resg", "aplic_min_inic", "situac_atual", "data_inicio_situac_atual",
-  "classe", "forma_condominio", "fundo_cotas", "fundo_exclusivo",
-  "fundo", "classific_cvm", "subclasse_cvm", "codigo"
+  "fund_name", "home_country", "asset_type", "active_canceled", "cnpj",
+  "anbima_classification", "portfolio_manager", "asset_manager",
+  "administrator", "benchmark", "qualified_investor", "leverage",
+  "start_date", "end_date", "quota_issuance_period", "redemption_conversion_period",
+  "redemption_payment_period", "minimum_first_investment", "current_situation", 
+  "current_situation_start_date", "class", "condo_type", "fund_of_funds", "exclusive_fund",
+  "fund_type", "cvm_classification", "cvm_subclass", "fund_code"
 )
 
 
 # Get full registration data
 registration_data <- merge(registration_data, fund_code, by = "cnpj")
+
+registration_data <- registration_data %>% 
+  mutate(across(
+    c(start_date, end_date, current_situation_start_date), ~as.Date(.x)
+  )) %>% 
+  mutate(
+    quota_issuance_period = ifelse(quota_issuance_period %in% c('D=0', 'd=0'), 'D+000', quota_issuance_period),
+    quota_issuance_period = ifelse(quota_issuance_period == 'Até 12h, D0; depois disso, D+1', 'D+001', quota_issuance_period),
+    quota_issuance_period = str_replace_all(quota_issuance_period, 'D\\+', '')
+  ) %>% 
+  mutate(
+    redemption_conversion_period = ifelse(redemption_conversion_period == 'D+30 dias corridos', 'D+030', redemption_conversion_period),
+    redemption_conversion_period = ifelse(redemption_conversion_period %in% c('D=1', 'Até 12h, D0; depois disso, D+1'), 'D+001', redemption_conversion_period),
+    redemption_conversion_period = str_replace_all(redemption_conversion_period, 'D\\+', '')
+  ) %>% 
+  mutate(
+    redemption_payment_period = ifelse(redemption_payment_period == '2 dias úteis da conversão', 'D+002', redemption_payment_period),
+    redemption_payment_period = ifelse(redemption_payment_period %in% c('4 dias0', 'D=4'), 'D+004', redemption_payment_period),
+    redemption_payment_period = str_replace_all(redemption_payment_period, 'D\\+', '')
+  ) %>% 
+  mutate(across(
+    c(quota_issuance_period, redemption_conversion_period, redemption_payment_period, minimum_first_investment), ~as.numeric(.x)
+  )) %>% 
+  mutate(
+    benchmark = gsub("IBRX", "IBRX-100", benchmark)
+  )
 
 rm(fund_code, fund_code_canceled, fund_code_active)
 
