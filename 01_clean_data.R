@@ -1,6 +1,4 @@
 
-source('99_functions.R')
-
 raw_data_path <- 'raw_data/'
 clean_data_path <- 'clean_data/'
 
