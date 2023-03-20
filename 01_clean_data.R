@@ -98,7 +98,7 @@ fund_code_canceled <- read_excel(
 fund_code <- rbind(fund_code_active, fund_code_canceled) %>% 
   dplyr::select(-1) %>%
   dplyr::select(c('CNPJ', 'Nome', 'Código')) %>% 
-  set_names(c('cnpj', 'fund_name', 'code'))
+  set_names(c('cnpj', 'fund_name', 'fund_code'))
 
 registration_data <- read_excel(
   paste0(raw_data_path, 'registration_data.xlsx'), na = '-', skip = 3
@@ -112,7 +112,7 @@ colnames(registration_data) <- c(
   'start_date', 'end_date', 'quota_issuance_period', 'redemption_conversion_period',
   'redemption_payment_period', 'minimum_first_investment', 'current_situation', 
   'current_situation_start_date', 'class', 'condo_type', 'fund_of_funds', 'exclusive_fund',
-  'fund_type', 'cvm_classification', 'cvm_subclass', 'fund_code'
+  'fund_type', 'cvm_classification', 'cvm_subclass'
 )
 
 # Get full registration data

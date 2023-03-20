@@ -76,12 +76,5 @@ data_quality_hyp1 <- function(nav_data){
 ############################################################################
 ############################################################################
 
-winsorize <- function (x, fraction = .01){
-  lim <- quantile(x, probs=c(fraction, 1-fraction), na.rm = TRUE)
-  
-  x[ x < lim[1]] <- lim[1]
-  x[ x > lim[2]] <- lim[2]
-  
-  return(x)
-}
+
 
