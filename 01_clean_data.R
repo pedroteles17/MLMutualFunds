@@ -1,28 +1,20 @@
 
 source('99_functions.R')
 
-###########################################################################
-###########################################################################
-###                                                                     ###
-###                              SECTION 1:                             ###
-###                             IMPORT DATA                             ###
-###                                                                     ###
-###########################################################################
-###########################################################################
+raw_data_path <- 'raw_data/'
+clean_data_path <- 'clean_data/'
 
 ##################################################################
 ##                          NEFIN Data                          ##
 ##################################################################
 
-nefin <- read_excel('clean_data/nefin.xlsx') %>% 
+nefin <- read_excel(paste0(clean_data_path, 'nefin.xlsx')) %>% 
   mutate(date = as.Date(date)) %>% 
   arrange(date)
 
 ##################################################################
 ##                          Daily Data                          ##
 ##################################################################
-
-folder_path <-'raw_data/'
 
 # Data types in daily frequency
 daily_data_types <- c(
@@ -32,10 +24,10 @@ daily_data_types <- c(
 
 # Because we have extraction data limits, 10 funds were left behind
 ten_remaining_funds <- read_excel(
-  "raw_data/ten_remaining_funds.xlsx", na = "-", skip = 3, col_types = 'text'
+  paste0(raw_data_path, 'ten_remaining_funds.xlsx'), na = '-', skip = 3, col_types = 'text'
 ) 
 
-list_ten_remaining <- vector("list", length = 6)
+list_ten_remaining <- vector('list', length = 6)
 for (i in seq_along(list_ten_remaining)) {
   list_ten_remaining[[i]] <- ten_remaining_funds[, c(1, (2 + 11 * (i - 1)):(1 + i * 11))]
 }
@@ -88,7 +80,7 @@ daily_data[['nav_return']] <- daily_data[['nav']] %>%
 daily_data <- Reduce(function(x, y) merge(x, y, all=TRUE, by = c('date', 'fund_code')), daily_data)
 
 rm(
-  daily_data_types, ten_remaining_funds, list_ten_remaining, i, 
+  daily_data_types, ten_remaining_funds, list_ten_remaining, i, nefin,
   ten_remaining, clean_economatica_data, join_data, data_quality_hyp1
 )
 
@@ -98,37 +90,35 @@ rm(
 
 # Each fund receives a unique code. We use this to avoid false duplicates. 
 fund_code_active <- read_excel(
-  paste0(folder_path, "code_active.xlsx"), na = "-", skip = 3
+  paste0(raw_data_path, 'code_active.xlsx'), na = '-', skip = 3
 ) 
 
 fund_code_canceled <- read_excel(
-  paste0(folder_path, "code_canceled.xlsx"), na = "-", skip = 3
+  paste0(raw_data_path, 'code_canceled.xlsx'), na = '-', skip = 3
 ) 
 
 fund_code <- rbind(fund_code_active, fund_code_canceled) %>% 
   dplyr::select(-1) %>%
-  dplyr::select(c('CNPJ', 'Nome')) %>% 
-  set_names(c('cnpj', 'code'))
+  dplyr::select(c('CNPJ', 'Nome', 'Código')) %>% 
+  set_names(c('cnpj', 'fund_name', 'code'))
 
 registration_data <- read_excel(
-  paste0(folder_path, "registration_data.xlsx"), na = "-", skip = 3
+  paste0(raw_data_path, 'registration_data.xlsx'), na = '-', skip = 3
 ) %>% 
-  dplyr::select(-c(1, 3)) %>% 
-  distinct()
+  dplyr::select(-c(1, 3))
 
 colnames(registration_data) <- c(
-  "fund_name", "home_country", "asset_type", "active_canceled", "cnpj",
-  "anbima_classification", "portfolio_manager", "asset_manager",
-  "administrator", "benchmark", "qualified_investor", "leverage",
-  "start_date", "end_date", "quota_issuance_period", "redemption_conversion_period",
-  "redemption_payment_period", "minimum_first_investment", "current_situation", 
-  "current_situation_start_date", "class", "condo_type", "fund_of_funds", "exclusive_fund",
-  "fund_type", "cvm_classification", "cvm_subclass", "fund_code"
+  'fund_name', 'home_country', 'asset_type', 'active_canceled', 'cnpj',
+  'anbima_classification', 'portfolio_manager', 'asset_manager',
+  'manager', 'benchmark', 'qualified_investor', 'leverage',
+  'start_date', 'end_date', 'quota_issuance_period', 'redemption_conversion_period',
+  'redemption_payment_period', 'minimum_first_investment', 'current_situation', 
+  'current_situation_start_date', 'class', 'condo_type', 'fund_of_funds', 'exclusive_fund',
+  'fund_type', 'cvm_classification', 'cvm_subclass', 'fund_code'
 )
 
-
 # Get full registration data
-registration_data <- merge(registration_data, fund_code, by = "cnpj")
+registration_data <- merge(registration_data, fund_code, by = c('cnpj', 'fund_name'))
 
 registration_data <- registration_data %>% 
   mutate(across(
@@ -153,9 +143,23 @@ registration_data <- registration_data %>%
     c(quota_issuance_period, redemption_conversion_period, redemption_payment_period, minimum_first_investment), ~as.numeric(.x)
   )) %>% 
   mutate(
-    benchmark = gsub("IBRX", "IBRX-100", benchmark)
-  )
+    benchmark = gsub('IBRX', 'IBRX-100', benchmark)
+  ) %>% 
+  dplyr::filter(class == 'Fundo de Ações') %>% 
+  dplyr::select(!c(
+    'home_country', 'asset_type', 'active_canceled', 'manager', 'benchmark',
+    'current_situation', 'current_situation_start_date', 'class',
+    'cvm_subclass', 'cvm_classification', 'active_canceled'
+  ))
 
-rm(fund_code, fund_code_canceled, fund_code_active)
+rm(fund_code, fund_code_canceled, fund_code_active, raw_data_path)
 
+#################################################################
+##                        Save the data                        ##
+#################################################################
 
+# To read: readRDS('dados_tratados_mes.rds')
+saveRDS(registration_data, file = paste0(clean_data_path, 'registration_data.rds'))
+saveRDS(daily_data, file = paste0(clean_data_path, 'nav_data.rds'))
+
+rm(registration_data, daily_data, clean_data_path)
