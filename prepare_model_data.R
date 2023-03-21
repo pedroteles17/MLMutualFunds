@@ -27,8 +27,10 @@ registration_data <- registration_data %>%
     condo_type = ifelse(condo_type == "Fechado", 0, 1),
     fund_of_funds = ifelse(fund_of_funds == "Não", 0, 1),
     exclusive_fund = ifelse(exclusive_fund == "Não", 0, 1)
-  )
+  ) %>% 
+  distinct(.keep_all = TRUE)
 
+# This may be caused by joining fund_code and registration_data  
 warning(str_glue(
   '{length(setdiff(registration_data$fund_code, nav_data$fund_code))}',
   ' funds lack registration data despite having NAV data.' 
@@ -97,9 +99,42 @@ select_elegible_funds <- function(start_date, end_date){
   
   # Fourth Restriction
   funds_fourth_restriction <- registration_data %>% 
-    dplyr::filter(fund_code %in% funds_third_restriction) %>% 
-    dplyr::filter(fund_name %ni% grepl('master', fund_name))
+    dplyr::filter(
+      fund_code %in% funds_third_restriction &
+        fund_name %ni% fund_name[grepl('master', fund_name)]
+    ) %>% 
+    distinct(fund_code) %>% 
+    pull(fund_code)
   
+  # Fifth Restriction
+  all_asset_managers <- unique(funds_fourth_restriction$asset_manager)
+  
+  specific_asset_manager_funds <- registration_data %>% 
+    dplyr::filter(fund_code %in% funds_fourth_restriction) %>% 
+    dplyr::filter(asset_manager == 'Safra Asset Management Ltda') %>% 
+    distinct(fund_code) %>% 
+    pull(fund_code)
+  
+  nav_asset_manager_funds <- nav_period %>% 
+    dplyr::filter(fund_code %in% specific_asset_manager_funds) %>% 
+    pivot_wider(id_cols = c('date'), names_from = 'fund_code', values_from = 'nav_return') %>% 
+    right_join(
+      dplyr::filter(dplyr::select(nefin, 'date'), date >= start_date & date <= end_date), 
+      by = 'date'
+    ) %>% 
+    dplyr::select(!date) %>% 
+    mutate_all(~replace(., is.na(.), 0))
+  
+  cor_asset_manager_funds <- cor(nav_asset_manager_funds)
+  cor_asset_manager_funds[lower.tri(cor_asset_manager_funds, diag = TRUE)] <- NA
+  cor_asset_manager_funds[cor_asset_manager_funds < 0.90] <- NA
+  
+  cor_asset_manager_funds <- cor_asset_manager_funds %>%
+    as.data.frame() %>%
+    mutate(var1 = rownames(.)) %>%
+    gather(var2, value, -var1) %>%
+    arrange(desc(value)) %>% 
+    drop_na(value)
     
 }
 

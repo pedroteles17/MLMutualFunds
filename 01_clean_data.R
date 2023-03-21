@@ -97,12 +97,8 @@ fund_code_canceled <- read_excel(
 
 fund_code <- rbind(fund_code_active, fund_code_canceled) %>% 
   dplyr::select(-1) %>%
-  dplyr::select(c(
-    'CNPJ', 'Nome', 'Código', 'Gestor da\ncarteira', 'Ativo /\nCancelado'
-  )) %>% 
-  set_names(c(
-    'cnpj', 'fund_name', 'fund_code', 'portfolio_manager', 'active_canceled'
-  )) %>% 
+  dplyr::select(c('CNPJ', 'Nome', 'Código')) %>% 
+  set_names(c('cnpj', 'fund_name', 'fund_code')) %>% 
   mutate(
     fund_name = str_to_lower(fund_name),
     fund_name = iconv(fund_name,from="UTF-8",to="ASCII//TRANSLIT")
@@ -124,17 +120,10 @@ registration_data <- read_excel(
   mutate(
     fund_name = str_to_lower(fund_name),
     fund_name = iconv(fund_name,from="UTF-8",to="ASCII//TRANSLIT")
-  ) %>% 
-  dplyr::select(!c(
-    'home_country', 'asset_type', 'active_canceled', 'manager', 'benchmark',
-    'current_situation', 'current_situation_start_date', 'class',
-    'cvm_subclass', 'cvm_classification'
-  ))
+  ) 
 
 # Get full registration data
-registration_data <- merge(
-  fund_code, registration_data, by = c('cnpj', 'fund_name'), all.x = TRUE
-)
+registration_data <- merge(registration_data, fund_code, by = c('cnpj', 'fund_name'))
 
 registration_data <- registration_data %>% 
   mutate(across(
