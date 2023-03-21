@@ -57,3 +57,52 @@ registration_data <- registration_data %>%
 ############################################################################
 ############################################################################
 
+select_elegible_funds <- function(start_date, end_date){
+  nav_period <- nav_data %>% 
+    arrange(date) %>% 
+    dplyr::filter(date >= start_date & date <= end_date)
+  
+  # First restriction
+  funds_first_retriction <- registration_data %>%
+    dplyr::filter(
+      inception_date < start_date & (closing_date > end_date | is.na(closing_date))
+    ) %>% 
+    distinct(fund_code) %>% 
+    pull(fund_code)
+  
+  # Second restriction
+  funds_second_restriction <- nav_period %>% 
+    dplyr::filter(fund_code %in% funds_first_retriction) %>% 
+    group_by(fund_code) %>% 
+    summarise(avg_aum = mean(aum, na.rm = TRUE)) %>% 
+    dplyr::filter(avg_aum > 10000) %>% 
+    distinct(fund_code) %>% 
+    pull(fund_code)
+  
+  # Third Restriction
+  ## First we get the number of trading days in this specified period based on NEFIN data
+  number_traiding_days <- nefin %>% 
+    dplyr::filter(date >= start_date & date <= end_date) %>% 
+    summarise(number_traiding_days = length(unique(date))) %>% 
+    pull(number_traiding_days)
+
+  funds_third_restriction <- nav_period %>%
+    dplyr::filter(fund_code %in% funds_second_restriction) %>% 
+    drop_na(nav_return) %>% 
+    group_by(fund_code) %>% 
+    summarise(pct_not_missing = n() / number_traiding_days) %>% 
+    dplyr::filter(pct_not_missing > 0.9) %>% 
+    distinct(fund_code) %>% 
+    pull(fund_code)
+  
+  # Fourth Restriction
+  funds_fourth_restriction <- registration_data %>% 
+    dplyr::filter(fund_code %in% funds_third_restriction) %>% 
+    dplyr::filter(fund_name %ni% grepl('master', fund_name))
+  
+    
+}
+
+
+
+

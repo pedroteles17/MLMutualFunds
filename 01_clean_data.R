@@ -97,30 +97,48 @@ fund_code_canceled <- read_excel(
 
 fund_code <- rbind(fund_code_active, fund_code_canceled) %>% 
   dplyr::select(-1) %>%
-  dplyr::select(c('CNPJ', 'Nome', 'Código')) %>% 
-  set_names(c('cnpj', 'fund_name', 'fund_code'))
+  dplyr::select(c(
+    'CNPJ', 'Nome', 'Código', 'Gestor da\ncarteira', 'Ativo /\nCancelado'
+  )) %>% 
+  set_names(c(
+    'cnpj', 'fund_name', 'fund_code', 'portfolio_manager', 'active_canceled'
+  )) %>% 
+  mutate(
+    fund_name = str_to_lower(fund_name),
+    fund_name = iconv(fund_name,from="UTF-8",to="ASCII//TRANSLIT")
+  ) 
 
 registration_data <- read_excel(
   paste0(raw_data_path, 'registration_data.xlsx'), na = '-', skip = 3
 ) %>% 
-  dplyr::select(-c(1, 3))
-
-colnames(registration_data) <- c(
-  'fund_name', 'home_country', 'asset_type', 'active_canceled', 'cnpj',
-  'anbima_classification', 'portfolio_manager', 'asset_manager',
-  'manager', 'benchmark', 'qualified_investor', 'leverage',
-  'start_date', 'end_date', 'quota_issuance_period', 'redemption_conversion_period',
-  'redemption_payment_period', 'minimum_first_investment', 'current_situation', 
-  'current_situation_start_date', 'class', 'condo_type', 'fund_of_funds', 'exclusive_fund',
-  'fund_type', 'cvm_classification', 'cvm_subclass'
-)
+  dplyr::select(-c(1, 3)) %>% 
+  set_names(c(
+    'fund_name', 'home_country', 'asset_type', 'active_canceled', 'cnpj',
+    'anbima_classification', 'portfolio_manager', 'asset_manager',
+    'manager', 'benchmark', 'qualified_investor', 'leverage',
+    'inception_date', 'closing_date', 'quota_issuance_period', 'redemption_conversion_period',
+    'redemption_payment_period', 'minimum_first_investment', 'current_situation', 
+    'current_situation_start_date', 'class', 'condo_type', 'fund_of_funds', 'exclusive_fund',
+    'fund_type', 'cvm_classification', 'cvm_subclass'
+  )) %>% 
+  mutate(
+    fund_name = str_to_lower(fund_name),
+    fund_name = iconv(fund_name,from="UTF-8",to="ASCII//TRANSLIT")
+  ) %>% 
+  dplyr::select(!c(
+    'home_country', 'asset_type', 'active_canceled', 'manager', 'benchmark',
+    'current_situation', 'current_situation_start_date', 'class',
+    'cvm_subclass', 'cvm_classification'
+  ))
 
 # Get full registration data
-registration_data <- merge(registration_data, fund_code, by = c('cnpj', 'fund_name'))
+registration_data <- merge(
+  fund_code, registration_data, by = c('cnpj', 'fund_name'), all.x = TRUE
+)
 
 registration_data <- registration_data %>% 
   mutate(across(
-    c(start_date, end_date, current_situation_start_date), ~as.Date(.x)
+    c(inception_date, closing_date, current_situation_start_date), ~as.Date(.x)
   )) %>% 
   mutate(
     quota_issuance_period = ifelse(quota_issuance_period %in% c('D=0', 'd=0'), 'D+000', quota_issuance_period),
