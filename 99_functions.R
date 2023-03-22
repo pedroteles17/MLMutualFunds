@@ -77,10 +77,10 @@ data_quality_hyp1 <- function(nav_data){
 ############################################################################
 
 #################################################################
-##                    Select Elegible Funds                    ##
+##                    Select Eligible Funds                    ##
 #################################################################
 
-select_elegible_funds <- function(nav_df, registration_df, start_date, end_date, min_avg_aum, max_pct_missing_nav){
+select_eligible_funds <- function(nav_df, registration_df, start_date, end_date, min_avg_aum, max_pct_missing_nav){
   nefin_dates <- nefin %>% 
     arrange(date) %>% 
     dplyr::filter(date >= start_date & date <= end_date) %>% 
@@ -121,8 +121,8 @@ select_elegible_funds <- function(nav_df, registration_df, start_date, end_date,
     restriction_five
   )
   
-  elegible_data <- list(
-    elegible_assets = restriction_five,
+  eligible_data <- list(
+    eligible_assets = restriction_five,
     n_assets = sapply(all_restrictions, length)
   )
   
