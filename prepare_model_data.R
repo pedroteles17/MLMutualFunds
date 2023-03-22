@@ -59,85 +59,9 @@ registration_data <- registration_data %>%
 ############################################################################
 ############################################################################
 
-select_elegible_funds <- function(start_date, end_date){
-  nav_period <- nav_data %>% 
-    arrange(date) %>% 
-    dplyr::filter(date >= start_date & date <= end_date)
-  
-  # First restriction
-  funds_first_retriction <- registration_data %>%
-    dplyr::filter(
-      inception_date < start_date & (closing_date > end_date | is.na(closing_date))
-    ) %>% 
-    distinct(fund_code) %>% 
-    pull(fund_code)
-  
-  # Second restriction
-  funds_second_restriction <- nav_period %>% 
-    dplyr::filter(fund_code %in% funds_first_retriction) %>% 
-    group_by(fund_code) %>% 
-    summarise(avg_aum = mean(aum, na.rm = TRUE)) %>% 
-    dplyr::filter(avg_aum > 10000) %>% 
-    distinct(fund_code) %>% 
-    pull(fund_code)
-  
-  # Third Restriction
-  ## First we get the number of trading days in this specified period based on NEFIN data
-  number_traiding_days <- nefin %>% 
-    dplyr::filter(date >= start_date & date <= end_date) %>% 
-    summarise(number_traiding_days = length(unique(date))) %>% 
-    pull(number_traiding_days)
-
-  funds_third_restriction <- nav_period %>%
-    dplyr::filter(fund_code %in% funds_second_restriction) %>% 
-    drop_na(nav_return) %>% 
-    group_by(fund_code) %>% 
-    summarise(pct_not_missing = n() / number_traiding_days) %>% 
-    dplyr::filter(pct_not_missing > 0.9) %>% 
-    distinct(fund_code) %>% 
-    pull(fund_code)
-  
-  # Fourth Restriction
-  funds_fourth_restriction <- registration_data %>% 
-    dplyr::filter(
-      fund_code %in% funds_third_restriction &
-        fund_name %ni% fund_name[grepl('master', fund_name)]
-    ) %>% 
-    distinct(fund_code) %>% 
-    pull(fund_code)
-  
-  # Fifth Restriction
-  all_asset_managers <- unique(funds_fourth_restriction$asset_manager)
-  
-  specific_asset_manager_funds <- registration_data %>% 
-    dplyr::filter(fund_code %in% funds_fourth_restriction) %>% 
-    dplyr::filter(asset_manager == 'Safra Asset Management Ltda') %>% 
-    distinct(fund_code) %>% 
-    pull(fund_code)
-  
-  nav_asset_manager_funds <- nav_period %>% 
-    dplyr::filter(fund_code %in% specific_asset_manager_funds) %>% 
-    pivot_wider(id_cols = c('date'), names_from = 'fund_code', values_from = 'nav_return') %>% 
-    right_join(
-      dplyr::filter(dplyr::select(nefin, 'date'), date >= start_date & date <= end_date), 
-      by = 'date'
-    ) %>% 
-    dplyr::select(!date) %>% 
-    mutate_all(~replace(., is.na(.), 0))
-  
-  cor_asset_manager_funds <- cor(nav_asset_manager_funds)
-  cor_asset_manager_funds[lower.tri(cor_asset_manager_funds, diag = TRUE)] <- NA
-  cor_asset_manager_funds[cor_asset_manager_funds < 0.90] <- NA
-  
-  cor_asset_manager_funds <- cor_asset_manager_funds %>%
-    as.data.frame() %>%
-    mutate(var1 = rownames(.)) %>%
-    gather(var2, value, -var1) %>%
-    arrange(desc(value)) %>% 
-    drop_na(value)
-    
-}
-
+select_elegible_funds(
+  nav_data, registration_data, '2020-01-01', '2020-12-31', 10000, 0.1
+)
 
 
 
