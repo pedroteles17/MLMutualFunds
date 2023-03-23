@@ -35,7 +35,13 @@ names(ten_remaining) <- daily_data_types
 
 # All funds (active and canceled). 
 ## WARNING: Might take a long time to run (5 minutes depending on the machine)
-daily_data <- Map(join_data, daily_data_types, ten_remaining)
+daily_data <- pmap(
+  list(
+    daily_data_types, ten_remaining
+  ),
+  join_data,
+  .progress = TRUE
+)
 names(daily_data) <- daily_data_types
 
 # Data Quality check

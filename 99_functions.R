@@ -76,14 +76,25 @@ data_quality_hyp1 <- function(nav_data){
 ############################################################################
 ############################################################################
 
+winsorize <- function (x, fraction = .01){
+  lim <- quantile(x, probs=c(fraction, 1-fraction), na.rm = TRUE)
+  
+  x[ x < lim[1]] <- lim[1]
+  x[ x > lim[2]] <- lim[2]
+  
+  return(x)
+}
+
 #################################################################
 ##                    Select Eligible Funds                    ##
 #################################################################
 
-select_eligible_funds <- function(nav_df, registration_df, start_date, end_date, min_avg_aum, max_pct_missing_nav){
+select_eligible_funds <- function(nav_df, registration_df, end_date, n_months_ago, min_avg_aum, max_pct_missing_nav){
+  start_date <- end_date %m-% months(n_months_ago)
+  
   nefin_dates <- nefin %>% 
     arrange(date) %>% 
-    dplyr::filter(date >= start_date & date <= end_date) %>% 
+    dplyr::filter(date >= start_date & date < end_date) %>% 
     pull(date)
   
   nav_period <- nav_df %>% 
@@ -126,7 +137,7 @@ select_eligible_funds <- function(nav_df, registration_df, start_date, end_date,
     n_assets = sapply(all_restrictions, length)
   )
   
-  return(restriction_five)
+  return(eligible_data)
 }
 
 # Choose funds that were present both before the start date and at (or after) the end date.
@@ -209,11 +220,17 @@ select_eligible_funds <- function(nav_df, registration_df, start_date, end_date,
     pivot_wider(
       id_cols = c('date'), names_from = 'fund_code', values_from = 'nav_return'
     ) %>% 
+    arrange(date) %>% 
     dplyr::select(!date) %>% 
     mutate_all(~replace(., is.na(.), 0))
   
   corr_nav <- cor(nav_funds)
   corr_nav[lower.tri(corr_nav, diag = TRUE) | corr_nav < max_corr] <- NA
+  
+  # If all correlations are below the max_corr, we dont remove any fund
+  if(all(is.na(corr_nav))){
+    return(rep(FALSE, length(funds_codes)))
+  }
   
   corr_nav <- corr_nav %>%
     as.data.frame() %>%
@@ -231,7 +248,7 @@ select_eligible_funds <- function(nav_df, registration_df, start_date, end_date,
   return(removed_funds_logical)
 }
 
-# Given a correlation dataframe, we will choose only one fund among those with high correlation with each other.
+# Given a correlation data frame, we will choose only one fund among those with high correlation with each other.
 ## As there may be multiple groups with high correlation, we may return more than one fund.
 ## Example:
 ### A, B and C have high correlation with each other
@@ -247,6 +264,7 @@ select_eligible_funds <- function(nav_df, registration_df, start_date, end_date,
     # Select the one with lowest AUM (to be removed)
     fund_to_be_removed <- nav_period_df %>% 
       dplyr::filter(fund_code %in% two_funds) %>% 
+      arrange(date) %>% 
       group_by(fund_code) %>% 
       summarise(avg_aum = mean(aum, na.rm = TRUE)) %>% 
       slice_min(avg_aum, with_ties = FALSE) %>% 
@@ -265,4 +283,166 @@ select_eligible_funds <- function(nav_df, registration_df, start_date, end_date,
   
   return(removed_funds)
 }
+
+#################################################################
+##                     Feature Engineering                     ##
+#################################################################
+
+generate_features <- function(eligible_funds, nav_df, nefin_df, end_estimation_date, n_months_ago){
+  start_estimation_date <- end_estimation_date %m-% months(n_months_ago)
+  
+  nav_period <- nav_df %>% 
+    dplyr::filter(
+      date >= start_estimation_date & date < end_estimation_date & fund_code %in% eligible_funds
+    ) %>% 
+    drop_na(nav_return) %>% 
+    arrange(date)
+  
+  nefin_period <- nefin_df %>% 
+    dplyr::filter(
+      date >= start_estimation_date & date < end_estimation_date
+    ) %>% 
+    arrange(date)
+  
+  # NAV Features
+  nav_features <- nav_period %>%
+    dplyr::select(date, fund_code, nav_return) %>%
+    complete(date, fund_code) %>%
+    mutate(nav_return = replace_na(nav_return, 0)) %>%
+    right_join(nefin_period, by = 'date') %>% 
+    group_by(fund_code) %>% 
+    group_map(
+      ~data.frame(fund_code = .y, .join_nav_features(.))
+    )
+  
+  nav_features <- do.call('rbind', nav_features)
+  
+  # AUM, Inflow, Outflow, Number of Shareholders, % Flow
+  other_features <- nav_period %>% 
+    group_by(fund_code) %>% 
+    summarise(
+      avg_aum = mean(aum, na.rm = TRUE),
+      initial_aum = aum[!is.na(aum)][1],
+      inflow = sum(inflow, na.rm = TRUE),
+      outflow = sum(outflow, na.rm = TRUE),
+      number_shareholders = rev(number_shareholders[!is.na(number_shareholders)])[1]
+    ) %>% 
+    ungroup() %>% 
+    mutate(
+      pct_flow = (inflow - outflow) / initial_aum
+    ) %>% 
+    dplyr::select(!initial_aum)
+  
+  all_features <- merge(nav_features, other_features, by = 'fund_code', all = TRUE) %>% 
+    mutate(
+      date = end_estimation_date, .before = 1
+    )
+  
+  return(all_features)
+  
+}
+
+.join_nav_features <- function(nav_nefin) {
+  
+  returns_xts <- xts(nav_nefin[,-1], nav_nefin$date)
+  
+  # Short term momentum (Lagged one-month abnormal return)
+  f_r2_1_info <- .calculate_nav_features(
+    first(last(returns_xts, '2 months'), '1 month')
+  ) 
+  colnames(f_r2_1_info) <- paste0('f_r2_1_', colnames(f_r2_1_info))
+  
+  # Momentum (Mean abnormal return from past 12 months)
+  f_r12_2_info <- .calculate_nav_features(
+    first(last(returns_xts, '12 months'), '10 month')
+  )
+  colnames(f_r12_2_info) <- paste0('f_r12_2_', colnames(f_r12_2_info))
+  
+  # Short-term reversal (Prior month abnormal return)
+  f_st_rev_info <- .calculate_nav_features(
+    last(returns_xts, '1 month')
+  )
+  colnames(f_st_rev_info) <- paste0('f_st_rev_', colnames(f_st_rev_info))
+  
+  return_features <- cbind(
+    cbind(f_r2_1_info, f_r12_2_info), f_st_rev_info
+  )
+  
+  return(return_features)
+}
+
+.calculate_nav_features <- function(fund_nefin_xts){
+  
+  # Carhart (1997) regression information
+  regres_info <- .get_regression_info(fund_nefin_xts, tstat = TRUE)
+  
+  # Kurtosis 
+  fund_kurtosis <- suppressMessages(kurtosis(fund_nefin_xts$nav_return))  
+  
+  fund_minus_market <- fund_nefin_xts$nav_return - fund_nefin_xts$Market
+  
+  # Israelsen Information Ratio (ttps://doi.org/10.1057/palgrave.jam.2240158)
+  mir <- .israelsen_information_ratio(fund_minus_market) # Modified IR
+  
+  # CVaR
+  cvar <- suppressMessages(CVaR(fund_nefin_xts$nav_return))
+  colnames(cvar) <- 'cvar'
+  
+  # Tracking Error
+  track_error <- sd(fund_minus_market)
+  
+  stats <- data.frame(mir, cvar, track_error, fund_kurtosis)
+  
+  return(cbind(stats, regres_info))
+}
+
+.israelsen_information_ratio <- function(fund_minus_market){
+  ER <- mean(fund_minus_market)
+  SD <- sd(fund_minus_market)
+  mir <- ER / (SD^(ER / abs(ER))) # Modified IR
+  
+  return(mir)
+}
+
+.get_regression_info <- function(fund_nefin, tstat = FALSE) {
+  
+  if(tstat){
+    summary_column_i <- 3
+  } else {
+    summary_column_i <- 1
+  }
+  
+  # Carhart (1997) regression
+  regres <- lm(
+    I(nav_return - Risk_free) ~ Rm_minus_Rf + SMB + HML + WML, data = fund_nefin
+  )
+  
+  # Get regression coefficients
+  regres_coef <- summary(regres)$coefficients
+  
+  alpha <- regres_coef[1, summary_column_i]
+  market <- regres_coef[2, summary_column_i]
+  size <- regres_coef[3, summary_column_i]
+  value <- regres_coef[4, summary_column_i]
+  momentum <- regres_coef[5, summary_column_i]
+  
+  ## R^2
+  r_squared <- summary(regres)$r.squared
+  
+  ## Idiosyncratic Volatility
+  ivol <- sd(regres$residuals)
+  
+  regres_info <- data.frame(
+    alpha, market, size, value,
+    momentum, r_squared, ivol
+  )
+  
+  return(regres_info)
+  
+}
+
+##################################################################
+##                      Dependent Variable                      ##
+##################################################################
+
 
