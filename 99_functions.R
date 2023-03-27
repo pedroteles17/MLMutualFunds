@@ -89,18 +89,25 @@ winsorize <- function (x, fraction = .01){
 ##                    Select Eligible Funds                    ##
 #################################################################
 
-select_eligible_funds <- function(nav_df, registration_df, end_date, n_months_ago, min_avg_aum, max_pct_missing_nav){
+select_eligible_funds <- function(nav_df, registration_df, nefin_df, end_date, n_months_ago, min_avg_aum, max_pct_missing_nav){
   start_date <- end_date %m-% months(n_months_ago)
   
-  nefin_dates <- nefin %>% 
+  nefin_dates <- nefin_df %>% 
     arrange(date) %>% 
-    dplyr::filter(date >= start_date & date < end_date) %>% 
+    dplyr::filter(
+      date >= start_date & date < end_date
+    ) %>% 
     pull(date)
   
   nav_period <- nav_df %>% 
     arrange(date) %>% 
-    dplyr::filter(date %in% nefin_dates)
+    dplyr::filter(
+      date >= start_date & date < end_date
+    )
   
+  nav_period_nefin_dates <- nav_period %>% 
+    dplyr::filter(date %in% nefin_dates)
+
   # First restriction
   restriction_one <- .inception_closing_dates(
     unique(registration_df$fund_code), registration_df, start_date, end_date
@@ -113,7 +120,7 @@ select_eligible_funds <- function(nav_df, registration_df, end_date, n_months_ag
   
   # Third Restriction
   restriction_three <- .maximum_percentage_missing_nav(
-    restriction_two, nav_period, nefin_dates, max_pct_missing_nav
+    restriction_two, nav_period_nefin_dates, max_pct_missing_nav
   )
   
   # Fourth Restriction
@@ -123,7 +130,7 @@ select_eligible_funds <- function(nav_df, registration_df, end_date, n_months_ag
   
   # Fifth Restriction
   restriction_five <- .only_one_feeder(
-    restriction_four, registration_df, nav_period
+    restriction_four, registration_df, nav_period_nefin_dates
   )
   
   all_restrictions <- list(
@@ -167,13 +174,15 @@ select_eligible_funds <- function(nav_df, registration_df, end_date, n_months_ag
 }
 
 # Select funds with a maximum percentage of missing values
-.maximum_percentage_missing_nav <- function(fund_univ, nav_period_df, nefin_dates, maximum_pct_missing){
+.maximum_percentage_missing_nav <- function(fund_univ, nav_period_df, maximum_pct_missing){
   selected_funds <- nav_period_df %>%
     dplyr::filter(fund_code %in% fund_univ) %>% 
-    drop_na(nav_return) %>% 
+    complete(fund_code, date) %>% 
     group_by(fund_code) %>% 
-    summarise(pct_not_missing = n() / length(nefin_dates)) %>% 
-    dplyr::filter(pct_not_missing > (1 - maximum_pct_missing)) %>% 
+    summarise(
+      pct_missing = sum(is.na(nav_return)) / n()
+    ) %>% 
+    dplyr::filter(pct_missing < maximum_pct_missing) %>% 
     distinct(fund_code) %>% 
     pull(fund_code)
   
@@ -294,28 +303,22 @@ generate_features <- function(eligible_funds, nav_df, nefin_df, end_estimation_d
   nav_period <- nav_df %>% 
     dplyr::filter(
       date >= start_estimation_date & date < end_estimation_date & fund_code %in% eligible_funds
-    ) %>% 
-    drop_na(nav_return) %>% 
-    arrange(date)
+    )
   
-  nefin_period <- nefin_df %>% 
-    dplyr::filter(
-      date >= start_estimation_date & date < end_estimation_date
-    ) %>% 
-    arrange(date)
+  nav_nefin <- .merge_nav_nefin(
+    nav_period, nefin_df, start_estimation_date, end_estimation_date
+  ) %>%
+    mutate(
+      nav_return = replace_na(nav_return, 0)
+    )
   
   # NAV Features
-  nav_features <- nav_period %>%
-    dplyr::select(date, fund_code, nav_return) %>%
-    complete(date, fund_code) %>%
-    mutate(nav_return = replace_na(nav_return, 0)) %>%
-    right_join(nefin_period, by = 'date') %>% 
+  nav_features <- nav_nefin %>%
     group_by(fund_code) %>% 
     group_map(
       ~data.frame(fund_code = .y, .join_nav_features(.))
-    )
-  
-  nav_features <- do.call('rbind', nav_features)
+    ) %>% 
+    bind_rows()
   
   # AUM, Inflow, Outflow, Number of Shareholders, % Flow
   other_features <- nav_period %>% 
@@ -441,8 +444,133 @@ generate_features <- function(eligible_funds, nav_df, nefin_df, end_estimation_d
   
 }
 
+.merge_nav_nefin <- function(nav_df, nefin_df, start_date, end_date){
+  nefin_period <- nefin_df %>% 
+    dplyr::filter(
+      date >= start_date & date < end_date
+    ) %>% 
+    arrange(date)
+  
+  nav_nefin <- nav_df %>% 
+    dplyr::select(
+      date, fund_code, nav_return
+    ) %>%
+    complete(date, fund_code)  %>%
+    right_join(nefin_period, by = 'date')
+  
+  return(nav_nefin)
+}
+
 ##################################################################
 ##                      Dependent Variable                      ##
 ##################################################################
 
+generate_dependent_variable <- function(eligible_funds, nav_df, nefin_df, base_date, n_months_ago, n_months_forward) {
+  start_estimation_date <- base_date %m-% months(n_months_ago)
+  end_evaluation_date <- base_date %m+% months(n_months_forward)
+  
+  nav_period <- nav_df %>% 
+    dplyr::filter(
+      fund_code %in% eligible_funds
+    ) 
+  
+  nav_nefin_full_period <- .merge_nav_nefin(
+    nav_period, nefin_df, start_estimation_date, end_evaluation_date
+  ) %>%
+    mutate(
+      nav_return = replace_na(nav_return, 0)
+    )
+  
+  # Estimation Period
+  nav_nefin_estimation_period <- nav_nefin_full_period %>% 
+    dplyr::filter(
+      date >= start_estimation_date & date < base_date
+    )
+  
+  regression_coefficients <- .get_regression_coefficients(
+    nav_nefin_estimation_period
+  )
+  
+  # Evaluation Period
+  nav_nefin_evaluation_period <- nav_nefin_full_period %>% 
+    dplyr::filter(
+      date >= base_date & date < end_evaluation_date
+    )
+  
+  nav_nefin_evaluation_returns <- .return_by_asset(nav_nefin_evaluation_period)
+  
+  # Calculate Abnormal Returns
+  ## R^{abn} = R^{actual} - (Risk Free^{actual} + Alpha^{past} + Beta^{past} * Factors^{actual}) 
+  n_days_evaluation_period <- length(unique(nav_nefin_evaluation_period$date))
+  
+  abnormal_return <- .calculate_abnormal_return(
+    nav_nefin_evaluation_returns, regression_coefficients, n_days_evaluation_period
+  )
+  
+  abnormal_return <- abnormal_return %>% 
+    mutate(date = base_date, .before = 1)
+  
+  return(abnormal_return)
+}
 
+.get_regression_coefficients <- function(nav_nefin){
+  regression_coefficients <- nav_nefin %>%
+    group_by(fund_code) %>% 
+    group_map(
+      ~data.frame(fund_code = .y, .get_regression_info(.))
+    ) %>% 
+    bind_rows() %>% 
+    dplyr::select(
+      fund_code, alpha, market, 
+      value, size, momentum
+    ) %>% 
+    pivot_longer(
+      !fund_code, names_to = 'assets', values_to = 'coefficient'
+    )
+  
+  return(regression_coefficients)
+}
+
+.return_by_asset <- function(nav_nefin){
+  assets_returns <- nav_nefin %>% 
+    group_by(fund_code) %>% 
+    summarise(
+      fund = prod(1 + nav_return) - 1,
+      risk_free = prod(1 + Risk_free) - 1,
+      market = prod(1 + Rm_minus_Rf) - 1,
+      value = prod(1 + HML) - 1,
+      size = prod(1 + SMB) - 1,
+      momentum = prod(1 + WML) - 1,
+    ) %>% 
+    pivot_longer(
+      !fund_code, names_to = 'assets', values_to = 'return'
+    )
+  
+  return(assets_returns)
+}
+
+.calculate_abnormal_return <- function(nav_nefin_returns, regression_coefficients, n_days){
+  abnormal_return <- nav_nefin_returns %>% 
+    full_join(regression_coefficients, by = c('fund_code', 'assets')) %>% 
+    mutate(
+      return = ifelse(
+        assets == 'alpha', 
+        (1 + coefficient) ^ (n_days) - 1, 
+        return
+      ),
+      coefficient = ifelse(
+        assets == 'alpha',
+        NA,
+        coefficient
+      )
+    ) %>% 
+    mutate(
+      coefficient = replace_na(coefficient, 1),
+      return = ifelse(assets != 'fund', -return, return)
+    ) %>% 
+    group_by(fund_code) %>% 
+    summarise(
+      abnormal_return = sum(coefficient * return)
+    )
+  
+}

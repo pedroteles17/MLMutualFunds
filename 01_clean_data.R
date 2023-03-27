@@ -78,7 +78,7 @@ daily_data[['nav_return']] <- daily_data[['nav']] %>%
     nav_return = append(NA, diff(nav)/nav[-length(nav)]), .after = 3
   ) %>% 
   dplyr::select(!nav) %>% 
-  dplyr::filter(date <= '2021-12-31') %>% 
+  dplyr::filter(date < '2022-03-01') %>% 
   drop_na(nav_return)
   
 daily_data <- Reduce(function(x, y) merge(x, y, all=TRUE, by = c('date', 'fund_code')), daily_data)
