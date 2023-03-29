@@ -26,8 +26,10 @@ predictions_path = f'{model_path}/predictions'
 os.makedirs(predictions_path, exist_ok=True)
 
 # Read data cleaned in R
-data = pd.read_csv(f"{model_path}/model_data.csv")
-
+data = pd.read_csv(
+    f"{model_path}/model_data.csv", dtype={'fund_code': str}
+)
+    
 print(f'Shape Before Drop: {data.shape}')
 
 data = data\
@@ -37,7 +39,6 @@ data = data\
 print(f'Shape After Drop: {data.shape}')
 
 data['date'] = data['date'].apply(pd.to_datetime)
-data['fund_code'] = data['fund_code'].apply(str)
 
 # %%
 # Separate train and test dataset into X_train, X_test, y_train, y_test
@@ -75,7 +76,7 @@ def fit_pred_model(model_class, X_train, X_test, y_train):
 
 #%%
 all_dates = list(set(data['date'].to_list()))
-all_dates = [date for date in all_dates if date > datetime.datetime(2010, 1, 1)]
+all_dates = [date for date in all_dates if date >= datetime.datetime(2010, 1, 1)]
 all_dates.sort()
 
 models = [
@@ -100,15 +101,19 @@ pred_df = pd.DataFrame(
     ]
 )
 for date in all_dates:
-    funds_code = data['fund_code'].to_list()
-
-    # Train = all data before test; Test = specific month
+    # Train = all data before test
     data_train = data.loc[data['date'] < date]\
         .drop(columns=['fund_code', 'date'])
 
-    data_test = data.loc[data['date'] == date]\
+    # Test = specific month
+    data_test = data.loc[data['date'] == date]
+
+    funds_code = data_test['fund_code'].to_list()
+    
+    data_test = data_test\
         .drop(columns=['fund_code', 'date'])
 
+    # X, y split
     X_train, y_train = prepare_train_test(data_train)
     X_test, y_test = prepare_train_test(data_test)
 

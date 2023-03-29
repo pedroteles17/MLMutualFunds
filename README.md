@@ -1,5 +1,83 @@
-# MLMutualFunds
-Code and data necessary to replicate the article "Using Machine Learning to Separate Good and Bad Equity Mutual Funds: Evidence from Brazil"
+# Identification
+
+* Title: Using Machine Learning to Separate Good and Bad Equity Mutual FundS: Evidence From Brazil
+
+* Authors:
+
+    * Pedro Teles
+
+    * Robert Iquiapaza
+
+    * Wanderci Bittencourt
+
+* Date: March 2023
+
+# Folder Contents
+
+* raw_data/{data}_{active_or_canceled}.xlsx: Because some data extraction limits existed, we had to download the data in multiple batches. The first part of the file name indicates which data point we are extracting (NAV, AUM, etc.), and the second part indicates if (at the time of the data extraction) the fund was active or already canceled. 
+
+* raw_data/registration_data.xlsx: Registration data regarding each fund. Here we have, for example, the inception date, the fund's unique identifier, name, asset manager, etc.
+
+* raw_data/ten_remaining_funds.xlsx: Because some data extraction limits existed, we couldn't extract ten funds in the same batches as the others. For that reason, these funds are presented in a separate file.
+
+* clean_data/nefin.xlsx: NEFIN data about risk factors and risk free rate.
+
+* 00_setup.R: Script to install and load all the required packages (latest  version).
+
+* 01_clean_data.R: Takes the raw data and clean it. This cleaned data will be stored as .rds files in the folder clean_data.
+
+* 02_prepare_model_data.R: Takes the clean data and uses it to build the features, and the dependent variable (abnormal return), for each fund and date. This file will output, to the model folder, a .csv file containing the features and abnormal returns. 
+
+* 03_run_model.py: Based on the data prepared for modeling, run multiple models on a month-by-month base. This file will output a .csv file, to the model/predictions folder, containing the predictions and the execution time for each model.
+
+* 04_build_portfolio.R: Analyze the predictions made by the models.
+
+* 99_functions.R: Set of functions that are going to be used.
+
+# Data Availability Statement
+
+All the Excel files used to suport the findings of this study have been deposited in the "raw_data" folder.
+
+# Computational Requirements
+
+R 4.2.1 [64-bit]:
+
+The file "00_setup.R" will install all dependencies (latest version), and should be run once prior to running other programs .R. For more information, check the "Instructions" section. 
+
+* tidyverse (2.0.0)
+* readxl (1.4.2)
+* lubridate (1.9.2)
+* xts (0.12.1)
+* PerformanceAnalytics (2.0.4)
+* pacman (0.5.1)
+
+Python 3.10.4:
+
+* pandas (1.5.2)
+* numpy (1.22.3)
+* scikit-learn (1.1.1)
+* lightgbm (3.3.2)
+* xgboost (1.6.1)
+
+The code was last run on a 4 core 11th Gen Intel Core i7-1165G7 laptop, with Windows version 11, 16 GB of RAM, and 512GB of SSD. Computation took 10 minutes.
+
+# Instructions
+
+First, make sure that you have R and Python installed and that you have the folder containing the R and Python codes as your working directory.
+
+Then, the code should be run in the folowing order:
+
+1- 00_setup.R
+
+2- 01_clean_data.R
+
+3- 02_prepare_model_data.R
+
+4- 03_run_model.py
+
+5- 04_build_portfolio.R
+
+No further action is needed on the replicator's part.
 
 # Data Qaulity Checks
 

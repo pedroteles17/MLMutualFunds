@@ -574,3 +574,53 @@ generate_dependent_variable <- function(eligible_funds, nav_df, nefin_df, base_d
     )
   
 }
+
+###########################################################################
+###########################################################################
+###                                                                     ###
+###                          BUILD_PORTFOLIO.R                          ###
+###                                                                     ###
+###########################################################################
+###########################################################################
+
+calculate_portfolio_retuns <- function(nav_df, funds_codes, start_date, n_months_ahead){
+  end_date <- start_date %m+% months(n_months_ahead)
+  
+  nav_period <- nav_df %>% 
+    dplyr::select(date, fund_code, nav_return) %>%
+    dplyr::filter(
+      fund_code %in% funds_codes
+    ) %>% 
+    complete(fund_code, date) %>% 
+    dplyr::filter(
+      date >= start_date & date < end_date
+    ) %>% 
+    pivot_wider(names_from = 'fund_code', values_from = 'nav_return') %>% 
+    mutate(across(
+      !date, ~replace_na(.x, 0)
+    ))
+  
+  missing_data <- setdiff(funds_codes, colnames(nav_period))
+  
+  if(length(missing_data) != 0){
+    print(str_glue('{start_date}: {missing_data}'))
+  }
+  
+  nav_period_xts <- xts(nav_period[,-1], nav_period$date)
+  
+  portfolio_return <- Return.portfolio(
+    nav_period_xts, 
+    rep(1 / ncol(nav_period_xts), ncol(nav_period_xts))
+  )
+  
+  portfolio_return <- data.frame(
+    date = index(portfolio_return),
+    portfolio_return, 
+    row.names = NULL
+  )
+  
+  return(portfolio_return)
+}
+
+
+
