@@ -59,7 +59,7 @@ Python 3.10.4:
 * lightgbm (3.3.2)
 * xgboost (1.6.1)
 
-The code was last run on a 4 core 11th Gen Intel Core i7-1165G7 laptop, with Windows version 11, 16 GB of RAM, and 512GB of SSD. Computation took 10 minutes.
+The code was last run on a 4 core 11th Gen Intel Core i7-1165G7 laptop, with Windows version 11, 16 GB of RAM, and 512GB of SSD. Computation took several hours.
 
 # Instructions
 
