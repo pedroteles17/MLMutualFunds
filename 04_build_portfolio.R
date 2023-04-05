@@ -17,7 +17,7 @@ predictions <- read.csv(
   mutate_at(
     c('prediction', 'true_value', 'execution_time'), as.numeric
   ) %>% 
-  distinct(date, funds_code, .keep_all = TRUE)
+  distinct(date, fund_code, model, .keep_all = TRUE)
 
 nav_data <- readRDS(paste0(clean_data_path, 'nav_data.rds')) %>% 
   dplyr::filter(
@@ -26,7 +26,7 @@ nav_data <- readRDS(paste0(clean_data_path, 'nav_data.rds')) %>%
   group_by(date) %>% 
   mutate(nav_return = winsorize(nav_return)) %>% 
   ungroup() %>% 
-  dplyr::filter(fund_code %in% unique(predictions$funds_code)) %>% 
+  dplyr::filter(fund_code %in% unique(predictions$fund_code)) %>% 
   arrange(date)
 
 rm(winsorize, clean_data_path)
@@ -79,7 +79,7 @@ decile_return <- predictions %>%
   group_map(
     ~data.frame(
       pred_decile = .y$pred_decile,
-      calculate_portfolio_retuns(nav_data, .x$funds_code, .y$date, 1)
+      calculate_portfolio_retuns(nav_data, .x$fund_code, .y$date, 1)
     )
   ) %>% 
   bind_rows() %>% 
@@ -89,3 +89,5 @@ decile_return_xts <- xts(decile_return[,-1], decile_return$date)
 
 PerformanceAnalytics::charts.PerformanceSummary(decile_return_xts, plot.engine = 'plotly')
 
+# Return by decile
+lapply(decile_return[,-1], function(x) prod(1 + x) - 1)
