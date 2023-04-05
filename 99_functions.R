@@ -490,6 +490,7 @@ generate_dependent_variable <- function(eligible_funds, nav_df, nefin_df, base_d
   regression_coefficients <- .get_regression_coefficients(
     nav_nefin_estimation_period
   )
+    
   
   # Evaluation Period
   nav_nefin_evaluation_period <- nav_nefin_full_period %>% 
@@ -497,14 +498,16 @@ generate_dependent_variable <- function(eligible_funds, nav_df, nefin_df, base_d
       date >= base_date & date < end_evaluation_date
     )
   
-  nav_nefin_evaluation_returns <- .return_by_asset(nav_nefin_evaluation_period)
+  nav_nefin_evaluation_returns <- .return_by_asset(
+    nav_nefin_evaluation_period
+  )
   
   # Calculate Abnormal Returns
-  ## R^{abn} = R^{actual} - (Risk Free^{actual} + Alpha^{past} + Beta^{past} * Factors^{actual}) 
+  ## R^{abn} = R^{actual} - (Risk Free^{actual} + Beta^{past} * Factors^{actual}) 
   n_days_evaluation_period <- length(unique(nav_nefin_evaluation_period$date))
   
   abnormal_return <- .calculate_abnormal_return(
-    nav_nefin_evaluation_returns, regression_coefficients, n_days_evaluation_period
+    nav_nefin_evaluation_returns, regression_coefficients
   )
   
   abnormal_return <- abnormal_return %>% 
@@ -521,7 +524,7 @@ generate_dependent_variable <- function(eligible_funds, nav_df, nefin_df, base_d
     ) %>% 
     bind_rows() %>% 
     dplyr::select(
-      fund_code, alpha, market, 
+      fund_code, market, 
       value, size, momentum
     ) %>% 
     pivot_longer(
@@ -549,21 +552,9 @@ generate_dependent_variable <- function(eligible_funds, nav_df, nefin_df, base_d
   return(assets_returns)
 }
 
-.calculate_abnormal_return <- function(nav_nefin_returns, regression_coefficients, n_days){
+.calculate_abnormal_return <- function(nav_nefin_returns, regression_coefficients){
   abnormal_return <- nav_nefin_returns %>% 
     full_join(regression_coefficients, by = c('fund_code', 'assets')) %>% 
-    mutate(
-      return = ifelse(
-        assets == 'alpha', 
-        (1 + coefficient) ^ (n_days) - 1, 
-        return
-      ),
-      coefficient = ifelse(
-        assets == 'alpha',
-        NA,
-        coefficient
-      )
-    ) %>% 
     mutate(
       coefficient = replace_na(coefficient, 1),
       return = ifelse(assets != 'fund', -return, return)
@@ -572,7 +563,6 @@ generate_dependent_variable <- function(eligible_funds, nav_df, nefin_df, base_d
     summarise(
       abnormal_return = sum(coefficient * return)
     )
-  
 }
 
 ###########################################################################

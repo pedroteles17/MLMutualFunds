@@ -96,7 +96,7 @@ models = [
 #%%
 pred_df = pd.DataFrame(
     columns = [
-        'funds_code', 'prediction', 'true_value', 
+        'fund_code', 'prediction', 'true_value', 
         'date', 'execution_time', 'model'
     ]
 )
@@ -108,7 +108,7 @@ for date in all_dates:
     # Test = specific month
     data_test = data.loc[data['date'] == date]
 
-    funds_code = data_test['fund_code'].to_list()
+    funds_code_test = data_test['fund_code'].to_list()
     
     data_test = data_test\
         .drop(columns=['fund_code', 'date'])
@@ -127,8 +127,8 @@ for date in all_dates:
         et = time.time() # Stop stopwatch
 
         model_pred = pd.DataFrame(
-            list(zip(funds_code, y_pred, y_test)), 
-            columns = ['funds_code', 'prediction', 'true_value']
+            list(zip(funds_code_test, y_pred, y_test)), 
+            columns = ['fund_code', 'prediction', 'true_value']
         )
 
         model_pred['date'] = date
