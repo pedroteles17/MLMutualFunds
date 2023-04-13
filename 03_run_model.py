@@ -93,6 +93,10 @@ models = [
     RandomForestRegressor(random_state=42)
 ]
 
+models = [
+    LinearRegression()
+]
+
 #%%
 pred_df = pd.DataFrame(
     columns = [
@@ -142,5 +146,28 @@ for date in all_dates:
         print(f'{date} - {model.__class__.__name__}')
     
     clear_output(wait=True)
+
+# %%
+# Feature importance
+feature_importance_data = data\
+        .drop(columns=['fund_code', 'date'])
+
+X_train, y_train = prepare_train_test(feature_importance_data)
+
+regressor = XGBRegressor(random_state=42)
+
+regressor.fit(X_train, y_train)
+
+feature_importance = regressor\
+    .get_booster()\
+    .get_score(importance_type='gain')
+
+feature_importance = pd.DataFrame(
+    data= list(feature_importance.values()), 
+    index = list(feature_importance.keys()), 
+    columns=["score"]
+)
+    
+feature_importance.to_csv(f'{predictions_path}/feature_importance.csv')
 
 # %%

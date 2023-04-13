@@ -612,5 +612,101 @@ calculate_portfolio_retuns <- function(nav_df, funds_codes, start_date, n_months
   return(portfolio_return)
 }
 
+calculate_long_short_returns <- function(tercil_return_df, nefin_df){
+  portfolio_return <- tercil_return_df %>%
+    pivot_wider(
+      names_from = 'pred_tercil', values_from = 'portfolio.returns'
+    ) %>% 
+    left_join(
+      select(nefin_df, date, Risk_free), 
+      by = 'date'
+    )
+  
+  if(nrow(portfolio_return) == 0){
+    return(
+      select(tercil_return_df, date, portfolio.returns)
+    )
+  }
+  
+  portfolio_return_xts <- xts(portfolio_return[,-1], portfolio_return$date)
+  
+  if(!all(colnames(long_short_return) == c('date', '1', '3', 'Risk_free'))){
+    print(str_glue('Error at: {tercil_return_df$date[0]}'))
+  }
+  
+  long_short <- Return.portfolio(
+    portfolio_return_xts, weights = c(1, -1, 1), rebalance_on = 'months'
+  )
+  
+  long_short <- data.frame(
+    date = index(long_short), 
+    long_short,
+    row.names = NULL
+  )
+  
+  return(long_short)
+  
+}
+
+performance_summary <- function(portfolio_returns, nefin, column_name) {
+  
+  market_return <- nefin$Rm_minus_Rf + nefin$Risk_free
+  
+  # CAPM
+  regres <- lm(I(portfolio_returns - Risk_free) ~ Rm_minus_Rf + SMB + HML + WML, data = nefin)
+  # Get regression coefficients
+  regres_coef <- summary(regres)$coefficients
+  
+  alpha <- (regres_coef[1, 1] + 1) ^ 252 - 1
+  t_alpha <- regres_coef[1, 3]
+  
+  beta <- regres_coef[2, 1]
+  
+  cumulative_ret <- prod(portfolio_returns + 1)^(252 / length(portfolio_returns)) - 1
+  # Portfolio volatility
+  vol <- sd(portfolio_returns) * sqrt(252)
+  
+  # Israelsen Information Ratio (ttps://doi.org/10.1057/palgrave.jam.2240158)
+  ER <- (1 + mean(portfolio_returns - market_return)) ^ 252 - 1
+  SD <- sd(portfolio_returns - market_return) * sqrt(252)
+  mir <- ER / (SD^(ER / abs(ER))) # Modified IR
+  
+  # Israelsen Sharpe Ratio (https://doi.org/10.1057/palgrave.jam.2240158)
+  ER <- (1 + mean(portfolio_returns - nefin$Risk_free)) ^ 252 - 1
+  SD <- sd(portfolio_returns - nefin$Risk_free) * sqrt(252)
+  msr <- ER / (SD^(ER / abs(ER))) # Modified SR
+  
+  # Tracking Error
+  track_error <- sd(portfolio_returns - market_return) * sqrt(252)
+  
+  # CVaR
+  cvar <- as.numeric(CVaR(portfolio_returns))
+  
+  # Maximum Drawdown
+  ## WARNING: Warning message because we are working with a vector instead of xts
+  suppressWarnings(max_draw <- maxDrawdown(portfolio_returns))
+  
+  results <- data.frame(c(
+    cumulative_ret, vol, 
+    alpha, t_alpha, beta, 
+    mir, msr, track_error,
+    cvar, max_draw
+  )) %>% 
+    set_names(str_glue('Decile {column_name}'))
+  
+  rownames(results) <- c(
+    "Annual. Return",
+    "Std. Deviation", 
+    "Alpha", "t(alpha)",
+    "Beta", "Info. Ratio", 
+    "Sharpe Ratio", "Track Error",
+    "CVaR", "Max. Drawdown"
+  )
+  
+  results[c(1, 2, 3, 8, 9, 10), 1] <- round(results[c(1, 2, 3, 8, 9, 10), 1]*100, 2)
+  results[c(4, 5, 6, 7), 1] <- round(results[c(4, 5, 6, 7), 1], 2)
+  
+  return(results)
+}
 
 

@@ -81,7 +81,9 @@ daily_data[['nav_return']] <- daily_data[['nav']] %>%
   dplyr::filter(date < '2022-03-01') %>% 
   drop_na(nav_return)
   
-daily_data <- Reduce(function(x, y) merge(x, y, all=TRUE, by = c('date', 'fund_code')), daily_data)
+daily_data <- Reduce(
+  function(x, y) merge(x, y, all=TRUE, by = c('date', 'fund_code')), daily_data
+)
 
 rm(
   daily_data_types, ten_remaining_funds, list_ten_remaining, i, nefin,
