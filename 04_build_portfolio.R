@@ -11,7 +11,7 @@ model_path <- 'model/'
 ###########################################################################
 
 predictions <- read.csv(
-  paste0(model_path, 'predictions/predictions.csv'), colClasses="character"
+  paste0(model_path, 'predictions/predictions1.csv'), colClasses="character"
 ) %>% 
   mutate(date = as.Date(date)) %>% 
   mutate_at(
@@ -128,37 +128,7 @@ dummy_models <- tercil_return %>%
 
 long_short_return <- long_short_return %>% 
   bind_rows(dummy_models)
-
-# Test the quality of the out-of-sample predictions
-## Article: Machine learning and the cross-section of emerging market stock returns
-## Diebold-Mariano-West 
-dmw_test_statistic <- predictions %>% 
-  mutate(
-    squared_pred_error = (true_value - prediction) ^ 2,
-    squared_true_value = (true_value) ^ 2
-  ) %>% 
-  group_by(model, date) %>% 
-  summarise(
-    dmw = 1 - (sum(squared_pred_error) / sum(squared_true_value)),
-    mse = mean(squared_pred_error)
-  ) %>% 
-  dplyr::select(!mse)
-
-ggplotly(
-  dmw_test_statistic %>%
-    ggplot( aes(x=date, y=dmw, group=model, color=model)) +
-    geom_line()
-)
-
-# Frequency of abnormal return decile in each predicted abnormal return decile
-pred_true_ranking <- predictions_decil %>% 
-  group_by(model, pred_decile, true_decile) %>% 
-  summarise(freq = n()) %>% 
-  ungroup() %>% 
-  group_by(model, pred_decile) %>% 
-  mutate(freq = freq / sum(freq)) %>% 
-  dplyr::filter(model == 'XGBRegressor')
-
+  
 ############################################################################
 ############################################################################
 ###                                                                      ###
@@ -223,7 +193,7 @@ nefin_eval <- nefin %>%
   )
 
 table2 <- decile_return %>% 
-  dplyr::filter(model == 'Lasso') %>% 
+  dplyr::filter(model == 'XGBRegressor') %>% 
   group_by(pred_decile) %>% 
   group_map(
     ~performance_summary(
@@ -232,5 +202,53 @@ table2 <- decile_return %>%
   ) %>% 
   bind_cols()
 
+##################################################################
+##                 Figure 1 - Prediction - True                 ##
+##################################################################
 
+predictions_by_group <- predictions %>% 
+  dplyr::filter(
+    model %in% c('XGBRegressor', 'LGBMRegressor', 'Ridge', 'LinearRegression')
+  ) %>% 
+  group_by(model, date) %>%
+  mutate(
+    pred_rank_group = ceiling( rank(-prediction) / n() / 0.25 ),
+    true_rank_group = ceiling( rank(-true_value) / n() / 0.25 )
+  ) %>% 
+  mutate(
+    pred_rank_group = factor(pred_rank_group, levels = 1:max(pred_rank_group)),
+    true_rank_group = factor(true_rank_group, levels = max(true_rank_group):1)
+  ) 
 
+pred_true_ranking <- predictions_by_group %>% 
+  group_by(model, pred_rank_group, true_rank_group) %>% 
+  summarise(freq = n()) %>% 
+  ungroup() %>% 
+  group_by(model, pred_rank_group) %>% 
+  mutate(freq = freq / sum(freq)) 
+
+figure1 <- ggplot(pred_true_ranking, aes(fill=true_rank_group, y=freq, x=pred_rank_group)) + 
+  geom_bar(position="stack", stat="identity") +
+  ylab('Frequency') + xlab('Predicted Quartile') +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_viridis(discrete = T) +
+  theme_classic() +
+  guides(fill=guide_legend(title="True Quartile")) +
+  facet_wrap(vars(model), ncol = 2)
+
+rm(predictions_by_group, pred_true_ranking)
+
+#################################################################
+##     Figure 2 - Alpha / Running Time/ Prediction Quality     ##
+#################################################################
+
+# Test the quality of the out-of-sample predictions
+out_of_sample_r2 <- predictions %>% 
+  mutate(
+    squared_pred_error = (true_value - prediction) ^ 2,
+    squared_true_value = (true_value) ^ 2
+  ) %>% 
+  group_by(model) %>% 
+  summarise(
+    r2 = 1 - (sum(squared_pred_error) / sum(squared_true_value))
+  )

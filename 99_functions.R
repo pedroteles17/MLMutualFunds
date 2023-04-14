@@ -622,15 +622,9 @@ calculate_long_short_returns <- function(tercil_return_df, nefin_df){
       by = 'date'
     )
   
-  if(nrow(portfolio_return) == 0){
-    return(
-      select(tercil_return_df, date, portfolio.returns)
-    )
-  }
-  
   portfolio_return_xts <- xts(portfolio_return[,-1], portfolio_return$date)
   
-  if(!all(colnames(long_short_return) == c('date', '1', '3', 'Risk_free'))){
+  if(!all(colnames(portfolio_return) == c('date', '1', '3', 'Risk_free'))){
     print(str_glue('Error at: {tercil_return_df$date[0]}'))
   }
   
