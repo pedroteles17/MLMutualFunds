@@ -573,7 +573,7 @@ generate_dependent_variable <- function(eligible_funds, nav_df, nefin_df, base_d
 ###########################################################################
 ###########################################################################
 
-calculate_portfolio_retuns <- function(nav_df, funds_codes, start_date, n_months_ahead){
+calculate_portfolio_retuns <- function(nav_df, funds_codes, weights, start_date, n_months_ahead){
   end_date <- start_date %m+% months(n_months_ahead)
   
   nav_period <- nav_df %>% 
@@ -598,10 +598,7 @@ calculate_portfolio_retuns <- function(nav_df, funds_codes, start_date, n_months
   
   nav_period_xts <- xts(nav_period[,-1], nav_period$date)
   
-  portfolio_return <- Return.portfolio(
-    nav_period_xts, 
-    rep(1 / ncol(nav_period_xts), ncol(nav_period_xts))
-  )
+  portfolio_return <- Return.portfolio(nav_period_xts, weights = weights)
   
   portfolio_return <- data.frame(
     date = index(portfolio_return),
@@ -622,8 +619,8 @@ calculate_long_short_returns <- function(tercil_return_df, nefin_df){
       by = 'date'
     )
   
-  portfolio_return_xts <- xts(portfolio_return[,-1], portfolio_return$date)
-  
+  portfolio_return_xts <- xts(portfolio_return[,-1], portfolio_return$date)  
+
   if(!all(colnames(portfolio_return) == c('date', '1', '3', 'Risk_free'))){
     print(str_glue('Error at: {tercil_return_df$date[0]}'))
   }
@@ -646,7 +643,7 @@ performance_summary <- function(portfolio_returns, nefin, column_name) {
   
   market_return <- nefin$Rm_minus_Rf + nefin$Risk_free
   
-  # CAPM
+  # Carhart four factor model
   regres <- lm(I(portfolio_returns - Risk_free) ~ Rm_minus_Rf + SMB + HML + WML, data = nefin)
   # Get regression coefficients
   regres_coef <- summary(regres)$coefficients
