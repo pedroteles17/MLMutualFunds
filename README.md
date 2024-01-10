@@ -1,6 +1,6 @@
 # Identification
 
-* Title: Using Machine Learning to Separate Good and Bad Equity Mutual FundS: Evidence From Brazil
+* Title: Using Machine Learning to Separate Good and Bad Equity Mutual Funds: Evidence From Brazil
 
 * Authors:
 
@@ -14,29 +14,27 @@
 
 # Folder Contents
 
-* 00_setup.R: Script to install and load all the required packages (latest  version).
+* `00_setup.R`: Script to install and load all the required packages (latest  version).
 
-* 01_clean_data.R: Takes the raw data and clean it. This cleaned data will be stored as .rds files in the folder clean_data.
+* `01_clean_data.R`: Takes the raw data and clean it. This cleaned data will be stored as `.rds` files in the folder `clean_data`.
 
-* 02_prepare_model_data.R: Takes the clean data and uses it to build the features, and the dependent variable (abnormal return), for each fund and date. This file will output, to the model folder, a .csv file containing the features and abnormal returns. 
+* `02_prepare_model_data.R`: Takes the clean data and uses it to build the features, and the dependent variable (abnormal return), for each fund and date. This file will output, to the `model` folder, a `.csv` file containing the features and abnormal returns. 
 
-* 03_run_model.py: Based on the data prepared for modeling, run multiple models on a month-by-month base. This file will output a .csv file, to the model/predictions folder, containing the predictions and the execution time for each model.
+* `03_run_model.py`: Based on the data prepared for modeling, run multiple models on a month-by-month base. This file will output a `.csv` file, to the `model/predictions` folder, containing the predictions and the execution time for each model.
 
-* 04_build_portfolio.R: Analyze the predictions made by the models.
+* `04_build_portfolio.R`: Analyze the predictions made by the models.
 
-* 99_functions.R: Set of functions that are going to be used.
+* `99_functions.R`: Set of functions that are going to be used.
 
 # Data Availability Statement
 
 Due to storage costs, raw data is unavailable here but can be requested via email at pedroteles17@gmail.com.
 
-```{r}
-
 # Computational Requirements
 
 R 4.2.1 [64-bit]:
 
-The file "00_setup.R" will install all dependencies (latest version), and should be run once prior to running other programs .R. For more information, check the "Instructions" section. 
+The file `00_setup.R` will install all dependencies (latest version), and should be run once prior to running other programs .R. For more information, check the "Instructions" section. 
 
 * tidyverse (2.0.0)
 * readxl (1.4.2)
@@ -61,15 +59,15 @@ First, make sure that you have R and Python installed and that you have the fold
 
 Then, the code should be run in the folowing order:
 
-1- 00_setup.R
+1- `00_setup.R`
 
-2- 01_clean_data.R
+2- `01_clean_data.R`
 
-3- 02_prepare_model_data.R
+3- `02_prepare_model_data.R`
 
-4- 03_run_model.py
+4- `03_run_model.py`
 
-5- 04_build_portfolio.R
+5- `04_build_portfolio.R`
 
 No further action is needed on the replicator's part.
 
