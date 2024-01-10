@@ -14,14 +14,6 @@
 
 # Folder Contents
 
-* raw_data/{data}_{active_or_canceled}.xlsx: Because some data extraction limits existed, we had to download the data in multiple batches. The first part of the file name indicates which data point we are extracting (NAV, AUM, etc.), and the second part indicates if (at the time of the data extraction) the fund was active or already canceled. 
-
-* raw_data/registration_data.xlsx: Registration data regarding each fund. Here we have, for example, the inception date, the fund's unique identifier, name, asset manager, etc.
-
-* raw_data/ten_remaining_funds.xlsx: Because some data extraction limits existed, we couldn't extract ten funds in the same batches as the others. For that reason, these funds are presented in a separate file.
-
-* clean_data/nefin.xlsx: NEFIN data about risk factors and risk free rate.
-
 * 00_setup.R: Script to install and load all the required packages (latest  version).
 
 * 01_clean_data.R: Takes the raw data and clean it. This cleaned data will be stored as .rds files in the folder clean_data.
@@ -36,7 +28,9 @@
 
 # Data Availability Statement
 
-All the Excel files used to suport the findings of this study have been deposited in the "raw_data" folder.
+Due to storage costs, raw data is unavailable here but can be requested via email at pedroteles17@gmail.com.
+
+```{r}
 
 # Computational Requirements
 
@@ -59,7 +53,7 @@ Python 3.10.4:
 * lightgbm (3.3.2)
 * xgboost (1.6.1)
 
-The code was last run on a 4 core 11th Gen Intel Core i7-1165G7 laptop, with Windows version 11, 16 GB of RAM, and 512GB of SSD. Computation took several hours.
+The code was last run on a 4 core 11th Gen Intel Core i7-1165G7 laptop, with Ubuntu version 22.04, 16 GB of RAM, and 512GB of SSD. Computation took several hours.
 
 # Instructions
 
