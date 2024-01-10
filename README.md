@@ -6,11 +6,11 @@
 
     * Pedro Teles
 
+    * Wanderci Bittencourt
+    
     * Robert Iquiapaza
 
-    * Wanderci Bittencourt
-
-* Date: March 2023
+* Date: January 2024
 
 # Folder Contents
 
