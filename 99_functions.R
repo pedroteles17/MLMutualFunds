@@ -7,7 +7,45 @@
 ###########################################################################
 ###########################################################################
 
-clean_economatica_data <- function(dirty_db){ # Economatica is the data provider
+load_clean_join_data <- function(data_type_name, file_name_list){
+  data_list <- list()
+  for(i in seq_along(file_name_list)){
+    unprocessed_data <- load_economatica_data(
+      paste0('raw_data/', data_type_name, '/', file_name_list[i])
+    )
+    # Annual Fee has a comma instead of a dot as a decimal separator
+    if(data_type_name == 'anual_fee'){
+      unprocessed_data <- .replace_comma_with_dot(unprocessed_data)
+    }
+    data_list[[i]] <- .clean_economatica_data(unprocessed_data)
+  }
+  
+  all_funds <- do.call(rbind, data_list) %>% 
+    arrange(date) %>% 
+    set_names(c('date', 'fund_code', data_type_name))
+  
+  return(all_funds)
+}
+
+load_economatica_data <- function(data_path){
+  df <- read_excel(
+    data_path,
+    na = "-", skip = 3, col_types = 'text'
+  )
+  
+  return(df)
+}
+
+.replace_comma_with_dot <- function(df){
+  df <- df %>% 
+    mutate(
+      across(everything(), ~str_replace_all(.x, ',', '.'))
+    )
+  
+  return(df)
+}
+
+.clean_economatica_data <- function(dirty_db){ # Economatica is the data provider
   funds_code <- str_split_i(colnames(dirty_db)[-1], '\n', -1)
   
   clean_db <- dirty_db %>% 
@@ -19,30 +57,6 @@ clean_economatica_data <- function(dirty_db){ # Economatica is the data provider
     drop_na(value)
   
   return(clean_db)
-}
-
-join_data <- function(data_type_name, ten_funds = NULL){
-  active_funds <- clean_economatica_data(read_excel(
-    paste0('raw_data/', data_type_name, '_active.xlsx'),
-    na = "-", skip = 3, col_types = 'text'
-  ))
-  
-  canceled_funds <- clean_economatica_data(read_excel(
-    paste0('raw_data/', data_type_name, '_canceled.xlsx'),
-    na = "-", skip = 3, col_types = 'text'
-  ))
-  
-  all_funds <- rbind(active_funds, canceled_funds)
-  
-  if(!is.null(ten_funds)){
-    all_funds <- rbind(all_funds, ten_funds)
-  }
-  
-  all_funds <- all_funds %>% 
-    arrange(date) %>% 
-    set_names(c('date', 'fund_code', data_type_name))
-  
-  return(all_funds)
 }
 
 data_quality_hyp1 <- function(nav_data){
@@ -490,7 +504,6 @@ generate_dependent_variable <- function(eligible_funds, nav_df, nefin_df, base_d
   regression_coefficients <- .get_regression_coefficients(
     nav_nefin_estimation_period
   )
-    
   
   # Evaluation Period
   nav_nefin_evaluation_period <- nav_nefin_full_period %>% 

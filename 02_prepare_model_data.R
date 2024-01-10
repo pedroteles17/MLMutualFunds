@@ -13,10 +13,14 @@ registration_data <- readRDS(paste0(clean_data_path, 'registration_data.rds'))
 
 nav_data <- readRDS(paste0(clean_data_path, 'nav_data.rds'))
 
-nefin <- read_excel(paste0(clean_data_path, 'nefin.xlsx')) %>% 
-  mutate(date = as.Date(date)) %>% 
+nefin <- read_excel(paste0(clean_data_path, 'nefin.xls')) %>% 
+  mutate(
+    date = paste(year, month, day, sep = "-"),
+    date = as.Date(date),
+    .after=1
+  ) %>% 
+  dplyr::select(-c('year', 'month', 'day')) %>%
   arrange(date) %>% 
-  dplyr::filter(date < '2022-03-01') %>% 
   mutate(Market = Rm_minus_Rf + Risk_free)
 
 registration_data <- registration_data %>%
@@ -26,7 +30,9 @@ registration_data <- registration_data %>%
     redemption_period = redemption_conversion_period + redemption_payment_period,
     condo_type = ifelse(condo_type == "Fechado", 0, 1),
     fund_of_funds = ifelse(fund_of_funds == "Não", 0, 1),
-    exclusive_fund = ifelse(exclusive_fund == "Não", 0, 1)
+    exclusive_fund = ifelse(exclusive_fund == "Não", 0, 1),
+    pension_fund = ifelse(pension_fund == "Não", 0, 1),
+    charges_performance_fee = ifelse(charges_performance_fee == "Não", 0, 1),
   ) %>% 
   distinct(.keep_all = TRUE)
 
@@ -64,13 +70,13 @@ rm(funds_regist_nav, clean_data_path)
 ###########################################################################
 ###########################################################################
 
-predict_n_months <- 1
+predict_n_months <- c(1, 3, 6, 9, 12)
 rebalance_frequency <- 1
 estimate_n_months_ago <- 12
 
 start_date <- as.Date("2005-01-01")
 # We need to subtract to ensure that we will have data to evaluate the model
-end_date <- as.Date("2022-03-01") - months(predict_n_months)
+end_date <- as.Date("2024-01-01") - months(min(predict_n_months))
 n_months <- interval(start_date, end_date) %/% months(rebalance_frequency)
 
 # Base Dates because ew will consider these dates for multiple circumstances
@@ -124,7 +130,10 @@ registration_features <- registration_data %>%
     fund_code, qualified_investor, leverage,
     inception_date, redemption_period,
     minimum_first_investment, condo_type,
-    fund_of_funds, exclusive_fund
+    fund_of_funds, exclusive_fund, foreing_investment,
+    pension_fund, charges_performance_fee, performance_fee,
+    initial_lockup_period, minimum_additional_investment,
+    minimum_redemption
   )
 
 model_features <- merge(
@@ -146,14 +155,31 @@ rm(generate_features, nav_features, registration_features)
 ############################################################################
 ############################################################################
 
-abnormal_returns <- pmap(
-  list(
-    eligible_funds, list(nav_data), list(nefin), base_dates, estimate_n_months_ago, predict_n_months
-  ),
-  generate_dependent_variable,
-  .progress = TRUE
-) %>% 
-  bind_rows()
+abnormal_returns <- vector('list', length(predict_n_months))
+for(i in seq_along(predict_n_months)){
+  print(paste0('Predicting ', predict_n_months[i], ' months ahead'))
+  
+  # Adjust dates to reflect the different holding periods (predict_n_months)
+  base_dates_adjusted <- base_dates[seq(1, length(base_dates), predict_n_months[i])]
+  eligible_funds_adjusted <- eligible_funds[seq(1, length(eligible_funds), predict_n_months[i])]
+  
+  abnormal_returns[[i]] <- pmap(
+    list(
+      eligible_funds_adjusted, list(nav_data), list(nefin), base_dates_adjusted, estimate_n_months_ago, predict_n_months[i]
+    ),
+    generate_dependent_variable,
+    .progress = TRUE
+  ) %>% 
+    bind_rows() %>% 
+    set_names(c(
+      'date', 'fund_code', 
+      paste0('abnormal_return_', predict_n_months[i], 'm')
+    ))
+}
+
+abnormal_returns <- Reduce(
+  function(x, y) merge(x, y, all=TRUE, by = c('date', 'fund_code')), abnormal_returns
+)
 
 rm(generate_dependent_variable, estimate_n_months_ago, predict_n_months, base_dates)
 

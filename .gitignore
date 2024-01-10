@@ -1,5 +1,7 @@
-### R ###
+raw_data/*
+clean_data/*
 
+### R ###
 # History files
 .Rhistory
 .Rapp.history

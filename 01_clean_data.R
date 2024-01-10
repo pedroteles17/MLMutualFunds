@@ -6,8 +6,13 @@ clean_data_path <- 'clean_data/'
 ##                          NEFIN Data                          ##
 ##################################################################
 
-nefin <- read_excel(paste0(clean_data_path, 'nefin.xlsx')) %>% 
-  mutate(date = as.Date(date)) %>% 
+nefin <- read_excel(paste0(clean_data_path, 'nefin.xls')) %>% 
+  mutate(
+    date = paste(year, month, day, sep = "-"),
+    date = as.Date(date),
+    .after=1
+  ) %>% 
+  dplyr::select(-c('year', 'month', 'day')) %>%
   arrange(date)
 
 ##################################################################
@@ -16,30 +21,21 @@ nefin <- read_excel(paste0(clean_data_path, 'nefin.xlsx')) %>%
 
 # Data types in daily frequency
 daily_data_types <- c(
-  'nav', 'aum', 'flow', 'inflow', 
+  'nav', 'aum', 'net_flow', 'inflow', 
   'outflow', 'number_shareholders'
 )
 
-# Because we have extraction data limits, 10 funds were left behind
-ten_remaining_funds <- read_excel(
-  paste0(raw_data_path, 'ten_remaining_funds.xlsx'), na = '-', skip = 3, col_types = 'text'
-) 
-
-list_ten_remaining <- vector('list', length = 6)
-for (i in seq_along(list_ten_remaining)) {
-  list_ten_remaining[[i]] <- ten_remaining_funds[, c(1, (2 + 11 * (i - 1)):(1 + i * 11))]
-}
-
-ten_remaining <- lapply(list_ten_remaining, clean_economatica_data)
-names(ten_remaining) <- daily_data_types
-
-# All funds (active and canceled). 
+# All funds (separated by start date)
 ## WARNING: Might take a long time to run (5 minutes depending on the machine)
-daily_data <- pmap(
-  list(
-    daily_data_types, ten_remaining
-  ),
-  join_data,
+file_name_list <- c(
+  'before_2011-12-31.xlsx', 
+  'after_2011-12-30_before_2019-12-31.xlsx',
+  'after_2019-12-30.xlsx'
+)
+
+daily_data <- map(
+  daily_data_types,
+  \(x) load_clean_join_data(x, file_name_list),
   .progress = TRUE
 )
 names(daily_data) <- daily_data_types
@@ -78,7 +74,6 @@ daily_data[['nav_return']] <- daily_data[['nav']] %>%
     nav_return = append(NA, diff(nav)/nav[-length(nav)]), .after = 3
   ) %>% 
   dplyr::select(!nav) %>% 
-  dplyr::filter(date < '2022-03-01') %>% 
   drop_na(nav_return)
   
 daily_data <- Reduce(
@@ -86,57 +81,34 @@ daily_data <- Reduce(
 )
 
 rm(
-  daily_data_types, ten_remaining_funds, list_ten_remaining, i, nefin,
-  ten_remaining, clean_economatica_data, join_data, data_quality_hyp1
+  daily_data_types, nefin, data_quality_hyp1, 
+  load_clean_join_data, file_name_list
 )
 
 #################################################################
 ##                      Registration Data                      ##
 #################################################################
 
-# Each fund receives a unique code. We use this to avoid false duplicates. 
-fund_code_active <- read_excel(
-  paste0(raw_data_path, 'code_active.xlsx'), na = '-', skip = 3
-) 
-
-fund_code_canceled <- read_excel(
-  paste0(raw_data_path, 'code_canceled.xlsx'), na = '-', skip = 3
-) 
-
-fund_code <- rbind(fund_code_active, fund_code_canceled) %>% 
-  dplyr::select(-1) %>%
-  dplyr::select(c('CNPJ', 'Nome', 'Código')) %>% 
-  set_names(c('cnpj', 'fund_name', 'fund_code')) %>% 
-  mutate(
-    fund_name = str_to_lower(fund_name),
-    fund_name = iconv(fund_name,from="UTF-8",to="ASCII//TRANSLIT")
-  ) 
-
-registration_data <- read_excel(
-  paste0(raw_data_path, 'registration_data.xlsx'), na = '-', skip = 3
-) %>% 
+registration_data <- load_economatica_data('raw_data/registration_data/full_period.xlsx') %>% 
   dplyr::select(-c(1, 3)) %>% 
   set_names(c(
     'fund_name', 'home_country', 'asset_type', 'active_canceled', 'cnpj',
-    'anbima_classification', 'portfolio_manager', 'asset_manager',
-    'manager', 'benchmark', 'qualified_investor', 'leverage',
-    'inception_date', 'closing_date', 'quota_issuance_period', 'redemption_conversion_period',
-    'redemption_payment_period', 'minimum_first_investment', 'current_situation', 
-    'current_situation_start_date', 'class', 'condo_type', 'fund_of_funds', 'exclusive_fund',
-    'fund_type', 'cvm_classification', 'cvm_subclass'
+    'anbima_classification', 'portfolio_manager', 'fund_code', 'isin', 
+    'manager_fee', 'manager_fee_lifetime', 'full_name', 'anbima_class',
+    'anbima_category', 'anbima_subcategory', 'cvm_classification', 'cvm_subclass',
+    'asset_manager', 'manager', 'benchmark', 'multimanager', 'qualified_investor',
+    'nav_profile', 'restricted', 'leverage', 'disclosure_date', 'fund_type', 'foreing_investment',
+    'pension_fund', 'respect_limits', 'inception_date', 'closing_date', 'charges_performance_fee',
+    'performance_fee', 'quota_issuance_period', 'redemption_conversion_period', 'redemption_payment_period',
+    'initial_lockup_period', 'cyclical_lockup_period','minimum_first_investment', 'minimum_additional_investment',
+    'minimum_redemption', 'identifier', 'entry_fee', 'exit_fee', 'performance_benchmark', 'condo_type',  
+    'fund_of_funds', 'exclusive_fund', 'portfolio_manager_cvm', 'name_in_other_funds'
   )) %>% 
   mutate(
     fund_name = str_to_lower(fund_name),
     fund_name = iconv(fund_name,from="UTF-8",to="ASCII//TRANSLIT")
-  ) 
-
-# Get full registration data
-registration_data <- merge(registration_data, fund_code, by = c('cnpj', 'fund_name'))
-
-registration_data <- registration_data %>% 
-  mutate(across(
-    c(inception_date, closing_date, current_situation_start_date), ~as.Date(.x)
-  )) %>% 
+  ) %>% 
+  # Standardize some columns
   mutate(
     quota_issuance_period = ifelse(quota_issuance_period %in% c('D=0', 'd=0'), 'D+000', quota_issuance_period),
     quota_issuance_period = ifelse(quota_issuance_period == 'Até 12h, D0; depois disso, D+1', 'D+001', quota_issuance_period),
@@ -152,20 +124,53 @@ registration_data <- registration_data %>%
     redemption_payment_period = ifelse(redemption_payment_period %in% c('4 dias0', 'D=4'), 'D+004', redemption_payment_period),
     redemption_payment_period = str_replace_all(redemption_payment_period, 'D\\+', '')
   ) %>% 
-  mutate(across(
-    c(quota_issuance_period, redemption_conversion_period, redemption_payment_period, minimum_first_investment), ~as.numeric(.x)
-  )) %>% 
   mutate(
-    benchmark = gsub('IBRX', 'IBRX-100', benchmark)
+    benchmark = gsub('IBRX', 'IBRX-100', benchmark),
+    multimanager = ifelse(multimanager == 'Não se Aplica', NA, multimanager)
+  ) %>%
+  mutate(
+    foreing_investment = ifelse(foreing_investment == 'Até 40 %', 40, foreing_investment),
+    foreing_investment = ifelse(foreing_investment == 'Até 20 %', 20, foreing_investment),
+    # Since we dont know the exact value, we will assume the smallest value (20)
+    foreing_investment = ifelse(foreing_investment == 'Sim', 20, foreing_investment),
+    foreing_investment = ifelse(foreing_investment == 'Não', 0, foreing_investment),
+    foreing_investment = ifelse(foreing_investment == 'Não se Aplica', 0, foreing_investment),
+    foreing_investment = ifelse(foreing_investment == 'Até 100%', 100, foreing_investment),
+    foreing_investment = ifelse(foreing_investment == 'ND', 0, foreing_investment),
+    foreing_investment = ifelse(foreing_investment == '> 67%', 67, foreing_investment),
   ) %>% 
-  dplyr::filter(class == 'Fundo de Ações') %>% 
-  dplyr::select(!c(
-    'home_country', 'asset_type', 'active_canceled', 'manager', 'benchmark',
-    'current_situation', 'current_situation_start_date', 'class',
-    'cvm_subclass', 'cvm_classification', 'active_canceled'
+  mutate(
+    performance_fee = str_extract(performance_fee, "\\d+[,.]?\\d*%?"),
+    performance_fee = str_replace_all(performance_fee, ',', '.'),
+    performance_fee = str_replace_all(performance_fee, '%', ''),
+    performance_fee = ifelse(charges_performance_fee == 'Não', 0, performance_fee),
+    performance_fee = as.numeric(performance_fee)
+  ) %>% 
+  # Right data types
+  mutate(across(
+    c(
+      quota_issuance_period, redemption_conversion_period, redemption_payment_period, 
+      minimum_first_investment, initial_lockup_period, minimum_additional_investment,
+      minimum_redemption
+    ), 
+    ~as.numeric(.x)
+  )) %>% 
+  mutate(across(
+    c(inception_date, closing_date), ~as.Date(as.numeric(.x), origin="1899-12-30")
+  )) %>%
+  dplyr::select(c(
+      "cnpj", "fund_name", "anbima_classification", "portfolio_manager", 
+      "asset_manager", "qualified_investor", "leverage", "inception_date", 
+      "closing_date", "quota_issuance_period", "redemption_conversion_period", 
+      "redemption_payment_period", "minimum_first_investment", "condo_type", 
+      "fund_of_funds", "exclusive_fund", "fund_type", "fund_code", 
+      # The fields below were added to the research in 2024
+      "multimanager", "foreing_investment", "pension_fund", "charges_performance_fee", 
+      "performance_fee", "initial_lockup_period", "minimum_additional_investment", 
+      "minimum_redemption"
   ))
 
-rm(fund_code, fund_code_canceled, fund_code_active, raw_data_path)
+rm(raw_data_path, load_economatica_data)
 
 #################################################################
 ##                        Save the data                        ##
