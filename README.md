@@ -26,6 +26,8 @@
 
 * `99_functions.R`: Set of functions that are going to be used.
 
+* `utils.py`: Set of classes and functions that are going to be used.
+
 # Data Availability Statement
 
 Due to storage costs, raw data is unavailable here but can be requested via email at pedroteles17@gmail.com.
