@@ -176,8 +176,7 @@ rm(raw_data_path, load_economatica_data)
 ##                        Save the data                        ##
 #################################################################
 
-# To read: readRDS('dados_tratados_mes.rds')
-saveRDS(registration_data, file = paste0(clean_data_path, 'registration_data.rds'))
-saveRDS(daily_data, file = paste0(clean_data_path, 'nav_data.rds'))
+write_parquet(registration_data, file = paste0(clean_data_path, 'registration_data.parquet'))
+write_parquet(daily_data, file = paste0(clean_data_path, 'nav_data.parquet'))
 
 rm(registration_data, daily_data, clean_data_path)

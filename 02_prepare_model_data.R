@@ -9,9 +9,9 @@ clean_data_path <- 'clean_data/'
 ###########################################################################
 ###########################################################################
 
-registration_data <- readRDS(paste0(clean_data_path, 'registration_data.rds'))
+registration_data <- read_parquet(paste0(clean_data_path, 'registration_data.parquet'))
 
-nav_data <- readRDS(paste0(clean_data_path, 'nav_data.rds'))
+nav_data <- read_parquet(paste0(clean_data_path, 'nav_data.parquet'))
 
 nefin <- read_excel(paste0(clean_data_path, 'nefin.xls')) %>% 
   mutate(
@@ -211,12 +211,11 @@ summary(model_data)
 ###########################################################################
 ###########################################################################
 
-model_folder <- '/model'
+model_folder <- 'model/'
 
 dir.create(file.path(getwd(), model_folder), showWarnings = FALSE)
 
-write.csv(
+write_parquet(
   model_data, 
-  paste0(getwd(), model_folder, '/model_data.csv'),
-  row.names = FALSE
+  paste0(model_folder, 'model_data.parquet')
 )
