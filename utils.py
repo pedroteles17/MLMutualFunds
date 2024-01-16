@@ -1,8 +1,11 @@
 import pandas as pd
 import time
+import lightgbm as lgb
+import optuna
 
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
+from sklearn.metrics import mean_squared_error
 
 class DataProcessor:
     """
@@ -18,7 +21,7 @@ class DataProcessor:
         self.scaler = scaler
         self.imputer_strategy = imputer_strategy
 
-    def process_date(self, split_date):
+    def get_train_test_processed(self, split_date):
         """
         Processes the data by splitting, scaling, and imputing, returning the train and test sets.
         """
@@ -86,12 +89,14 @@ class DataProcessor:
         return X_train_scaled, X_test_scaled
     
 class Model:
-    def __init__(self, model, X_train, y_train, X_test, y_test):
+    def __init__(self, model, X_train, y_train, X_test, y_test, X_val=None, y_val=None):
         self.model = model
         self.X_train = X_train
         self.y_train = y_train
         self.X_test = X_test
         self.y_test = y_test
+        self.X_val = X_val
+        self.y_val = y_val
 
     def get_predictions(self):
         st = time.time()
@@ -118,6 +123,34 @@ class Model:
             )
         
         return prediction_df
+    
+    def run_optuna_study(self, objective, direction, n_trials=100):
+        study = optuna.create_study(direction=direction)
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+        return study
+    
+    def lightgbm_objective(self, trial):
+        params = {
+            'objective': 'regression',
+            'metric': 'rmse',
+            'verbosity': -1,
+            'random_state': 42,
+            'boosting_type': trial.suggest_categorical('boosting_type', ['gbdt', 'dart']),
+            'num_leaves': trial.suggest_int('num_leaves', 20, 150),
+            'max_depth': trial.suggest_int('max_depth', 3, 30), 
+            'n_estimators': trial.suggest_int('n_estimators', 50, 200),
+            'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.5, log=True), 
+            'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 10, 200),
+            'feature_fraction': trial.suggest_float('feature_fraction', 0.4, 1.0),
+        }
+
+        gbm = lgb.LGBMRegressor(**params)
+        gbm.fit(self.X_train, self.y_train)
+        
+        y_pred = gbm.predict(self.X_val)
+        rmse = mean_squared_error(self.y_val, y_pred, squared=False)
+        return rmse
+
 
 
 
