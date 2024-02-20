@@ -11,7 +11,7 @@ load_clean_join_data <- function(data_type_name, file_name_list){
   data_list <- list()
   for(i in seq_along(file_name_list)){
     unprocessed_data <- load_economatica_data(
-      paste0('raw_data/', data_type_name, '/', file_name_list[i])
+      paste0('data/raw_data/', data_type_name, '/', file_name_list[i])
     )
     # Annual Fee has a comma instead of a dot as a decimal separator
     if(data_type_name == 'anual_fee'){

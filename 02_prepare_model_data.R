@@ -1,5 +1,5 @@
 
-clean_data_path <- 'clean_data/'
+clean_data_path <- 'data/clean_data/'
 
 ###########################################################################
 ###########################################################################
@@ -211,9 +211,7 @@ summary(model_data)
 ###########################################################################
 ###########################################################################
 
-model_folder <- 'model/'
-
-dir.create(file.path(getwd(), model_folder), showWarnings = FALSE)
+model_folder <- 'data/model/'
 
 write_parquet(
   model_data, 

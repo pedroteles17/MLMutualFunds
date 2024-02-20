@@ -1,6 +1,6 @@
 
-clean_data_path <- 'clean_data/'
-model_path <- 'model/'
+clean_data_path <- 'data/clean_data/'
+model_path <- 'data/model/'
 
 ###########################################################################
 ###########################################################################
@@ -10,16 +10,14 @@ model_path <- 'model/'
 ###########################################################################
 ###########################################################################
 
-predictions <- read.csv(
-  paste0(model_path, 'predictions/predictions.csv'), colClasses="character"
-) %>% 
+predictions <- read_parquet(paste0(model_path, 'predictions.parquet')) %>% 
   mutate(date = as.Date(date)) %>% 
   mutate_at(
     c('prediction', 'true_value', 'execution_time'), as.numeric
   ) %>% 
   distinct(date, fund_code, model, .keep_all = TRUE)
 
-nav_data <- readRDS(paste0(clean_data_path, 'nav_data.rds')) %>% 
+nav_data <- read_parquet(paste0(clean_data_path, 'nav_data.parquet')) %>% 
   drop_na(nav_return) %>% 
   dplyr::filter(
     date > '2008-12-31'
@@ -30,19 +28,20 @@ nav_data <- readRDS(paste0(clean_data_path, 'nav_data.rds')) %>%
   dplyr::filter(fund_code %in% unique(predictions$fund_code)) %>% 
   arrange(date)
 
-model_data <- read_csv(
-  str_glue(model_path, 'model_data.csv')
-) %>% 
+model_data <- read_parquet(paste0(model_path, 'model_data.parquet')) %>% 
   dplyr::select(
     !c('minimum_first_investment', 'qualified_investor')
   ) %>% 
-  drop_na() %>% 
   mutate(age = age / 365)
 
-nefin <- read_excel(paste0(clean_data_path, 'nefin.xlsx')) %>% 
-  mutate(date = as.Date(date)) %>% 
+nefin <- read_excel(paste0(clean_data_path, 'nefin.xls')) %>% 
+  mutate(
+    date = paste(year, month, day, sep = "-"),
+    date = as.Date(date),
+    .after=1
+  ) %>% 
+  dplyr::select(-c('year', 'month', 'day')) %>%
   arrange(date) %>% 
-  dplyr::filter(date < '2022-03-01') %>% 
   mutate(Market = Rm_minus_Rf + Risk_free)
 
 rm(winsorize, clean_data_path)
@@ -233,7 +232,7 @@ model_data_tb3 <- model_data %>%
 
 average_characteristics <- predictions_decil %>%
   dplyr::filter(
-    model == 'XGBRegressor'
+    model == 'MLPRegressor-4HL-128N'
   ) %>% 
   dplyr::select(
     fund_code, date, pred_decile
@@ -267,7 +266,7 @@ nefin_eval <- nefin %>%
   )
 
 performance_metrics <- decile_return %>% 
-  dplyr::filter(model == 'XGBRegressor') %>% 
+  dplyr::filter(model == 'MLPRegressor-4HL-128N') %>% 
   group_by(pred_decile) %>% 
   group_map(
     ~performance_summary(

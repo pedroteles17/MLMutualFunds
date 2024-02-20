@@ -7,6 +7,8 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import mean_squared_error
 
+optuna.logging.set_verbosity(optuna.logging.WARNING)
+
 class DataProcessor:
     """
     A class to process financial data for predictive modeling.
@@ -49,27 +51,14 @@ class DataProcessor:
         X = data.drop(columns=[col for col in data.columns if col.startswith('abnormal_return')])
         return X, y
 
-    def _train_test_on_date_split(self, split_date, add_validation=False):
+    def _train_test_on_date_split(self, split_date):
         """
         Splits the data into training and testing sets based on a given date.
         """
         train = self.data[self.data['date'] < split_date]
         test = self.data[self.data['date'] == split_date]
 
-        if add_validation:
-            validation_date = train['date'].max()
-            return self._train_validation_split(train, validation_date) + (test,)
-        
         return train, test
-    
-    @staticmethod
-    def _train_validation_split(train, validation_date):
-        """
-        Splits the training data into training and validation sets based on a validation date.
-        """
-        validation = train[train['date'] >= validation_date]
-        train = train[train['date'] < validation_date]
-        return train, validation
 
     def _pre_processing(self, X_train, X_test):
         """
@@ -89,14 +78,12 @@ class DataProcessor:
         return X_train_scaled, X_test_scaled
     
 class Model:
-    def __init__(self, model, X_train, y_train, X_test, y_test, X_val=None, y_val=None):
+    def __init__(self, model, X_train, y_train, X_test, y_test):
         self.model = model
         self.X_train = X_train
         self.y_train = y_train
         self.X_test = X_test
         self.y_test = y_test
-        self.X_val = X_val
-        self.y_val = y_val
 
     def get_predictions(self):
         st = time.time()
@@ -126,7 +113,7 @@ class Model:
     
     def run_optuna_study(self, objective, direction, n_trials=100):
         study = optuna.create_study(direction=direction)
-        study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+        study.optimize(objective, n_trials=n_trials)
         return study
     
     def lightgbm_objective(self, trial):
@@ -135,20 +122,17 @@ class Model:
             'metric': 'rmse',
             'verbosity': -1,
             'random_state': 42,
-            'boosting_type': trial.suggest_categorical('boosting_type', ['gbdt', 'dart']),
             'num_leaves': trial.suggest_int('num_leaves', 20, 150),
             'max_depth': trial.suggest_int('max_depth', 3, 30), 
-            'n_estimators': trial.suggest_int('n_estimators', 50, 200),
-            'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.5, log=True), 
-            'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 10, 200),
-            'feature_fraction': trial.suggest_float('feature_fraction', 0.4, 1.0),
+            'n_estimators': trial.suggest_int('n_estimators', 100, 300),
+            'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.5, log=True)
         }
 
         gbm = lgb.LGBMRegressor(**params)
         gbm.fit(self.X_train, self.y_train)
         
-        y_pred = gbm.predict(self.X_val)
-        rmse = mean_squared_error(self.y_val, y_pred, squared=False)
+        y_pred = gbm.predict(self.X_test)
+        rmse = mean_squared_error(self.y_test, y_pred, squared=False)
         return rmse
 
 

@@ -1,6 +1,6 @@
 
-raw_data_path <- 'raw_data/'
-clean_data_path <- 'clean_data/'
+raw_data_path <- 'data/raw_data/'
+clean_data_path <- 'data/clean_data/'
 
 ##################################################################
 ##                          NEFIN Data                          ##
@@ -89,7 +89,7 @@ rm(
 ##                      Registration Data                      ##
 #################################################################
 
-registration_data <- load_economatica_data('raw_data/registration_data/full_period.xlsx') %>% 
+registration_data <- load_economatica_data(paste0(raw_data_path, 'registration_data/full_period.xlsx')) %>% 
   dplyr::select(-c(1, 3)) %>% 
   set_names(c(
     'fund_name', 'home_country', 'asset_type', 'active_canceled', 'cnpj',
@@ -176,7 +176,7 @@ rm(raw_data_path, load_economatica_data)
 ##                        Save the data                        ##
 #################################################################
 
-write_parquet(registration_data, file = paste0(clean_data_path, 'registration_data.parquet'))
-write_parquet(daily_data, file = paste0(clean_data_path, 'nav_data.parquet'))
+write_parquet(registration_data, paste0(clean_data_path, 'registration_data.parquet'))
+write_parquet(daily_data, paste0(clean_data_path, 'nav_data.parquet'))
 
 rm(registration_data, daily_data, clean_data_path)
